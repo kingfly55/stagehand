@@ -116,7 +116,13 @@ export function getAISDKLanguageModel(
         Object.keys(AISDKProvidersWithAPIKey),
       );
     }
-    const provider = creator(clientOptions);
+    // Flatten providerOptions into the options bag for the AI SDK constructor
+    const { providerOptions, ...restOptions } = clientOptions;
+    const flatOptions = {
+      ...restOptions,
+      ...(providerOptions ?? {}),
+    } as ClientOptions;
+    const provider = creator(flatOptions);
     // Get the specific model from the provider
     return provider(subModelName);
   } else {
