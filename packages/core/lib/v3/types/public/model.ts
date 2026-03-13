@@ -1,4 +1,5 @@
 import type { ClientOptions as AnthropicClientOptionsBase } from "@anthropic-ai/sdk";
+import type { AmazonBedrockProviderSettings as AmazonBedrockProviderSettingsBase } from "@ai-sdk/amazon-bedrock";
 import type { GoogleVertexProviderSettings as GoogleVertexProviderSettingsBase } from "@ai-sdk/google-vertex";
 import type { LanguageModelV2 } from "@ai-sdk/provider";
 import type { ClientOptions as OpenAIClientOptionsBase } from "openai";
@@ -36,6 +37,17 @@ export type GoogleVertexProviderSettings = Pick<
     credentials?: GoogleServiceAccountCredentials;
   };
 };
+
+export type BedrockProviderSettings = Pick<
+  AmazonBedrockProviderSettingsBase,
+  | "apiKey"
+  | "region"
+  | "accessKeyId"
+  | "secretAccessKey"
+  | "sessionToken"
+  | "baseURL"
+  | "headers"
+>;
 
 export type AnthropicJsonSchemaObject = {
   definitions?: {
@@ -97,6 +109,7 @@ export type ModelProvider =
 export type ClientOptions = (
   | OpenAIClientOptions
   | AnthropicClientOptions
+  | BedrockProviderSettings
   | GoogleVertexProviderSettings
 ) & {
   apiKey?: string;

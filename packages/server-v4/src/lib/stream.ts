@@ -7,6 +7,7 @@ import { z } from "zod/v4";
 import { AppError } from "./errorHandler.js";
 import {
   getModelApiKey,
+  getRequestModelConfig,
   getOptionalHeader,
   shouldRespondWithSSE,
 } from "./header.js";
@@ -117,6 +118,7 @@ export async function createStreamingResponse<TV3>({
 
   const requestContext: RequestContext = {
     modelApiKey,
+    modelConfig: getRequestModelConfig(request),
     logger: shouldStreamResponse
       ? (message) => {
           sendData("log", { status: "running", message });
