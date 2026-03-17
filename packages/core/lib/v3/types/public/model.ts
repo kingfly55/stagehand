@@ -105,8 +105,6 @@ export type ClientOptions = {
   apiKey?: string;
   provider?: AgentProviderType;
   baseURL?: string;
-  /** Custom headers for the model provider */
-  headers?: Record<string, string>;
   /** Provider-specific options passed through to the AI SDK provider constructor.
    * Use BedrockProviderOptions for Bedrock (region, accessKeyId, etc.)
    * or GoogleVertexProviderSettings for Vertex (project, location, etc.).
@@ -124,6 +122,8 @@ export type ClientOptions = {
   maxImages?: number;
   /** Temperature for model inference */
   temperature?: number;
+  /** Custom headers sent with every request to the provider */
+  headers?: Record<string, string>;
 };
 
 export interface ModelConfigObject
