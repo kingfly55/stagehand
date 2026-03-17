@@ -49,42 +49,243 @@ export const LocalBrowserLaunchOptionsSchema = z
   .strict()
   .meta({ id: "LocalBrowserLaunchOptions" });
 
-/** Detailed model configuration object */
-export const ModelConfigObjectSchema = z
+/** Bedrock provider options passed to the AI SDK constructor */
+export const BedrockApiKeyProviderOptionsSchema = z
   .object({
-    provider: z
-      .enum(["openai", "anthropic", "google", "microsoft", "bedrock"])
+    region: z.string().meta({
+      description: "AWS region for Amazon Bedrock",
+      example: "us-east-1",
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockApiKeyProviderOptions" });
+
+/** Bedrock AWS credential options passed to the AI SDK constructor */
+export const BedrockAwsCredentialsProviderOptionsSchema = z
+  .object({
+    region: z.string().meta({
+      description: "AWS region for Amazon Bedrock",
+      example: "us-east-1",
+    }),
+    accessKeyId: z.string().meta({
+      description: "AWS access key ID for Bedrock",
+      example: "AKIAIOSFODNN7EXAMPLE",
+    }),
+    secretAccessKey: z.string().meta({
+      description: "AWS secret access key for Bedrock",
+      example: "wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY",
+    }),
+    sessionToken: z.string().optional().meta({
+      description: "Optional AWS session token for temporary credentials",
+      example: "IQoJb3JpZ2luX2VjEOr//////////wEaCXVzLXdlc3QtMiJIMEYCIQ...",
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockAwsCredentialsProviderOptions" });
+
+/** Bedrock provider options passed to the AI SDK constructor */
+export const BedrockProviderOptionsSchema = z
+  .union([
+    BedrockApiKeyProviderOptionsSchema,
+    BedrockAwsCredentialsProviderOptionsSchema,
+  ])
+  .meta({ id: "BedrockProviderOptions" });
+
+/** Google service account credentials for Vertex provider options */
+export const GoogleServiceAccountCredentialsSchema = z
+  .object({
+    type: z.string().optional(),
+    project_id: z.string().optional(),
+    private_key_id: z.string().optional(),
+    private_key: z.string().optional(),
+    client_email: z.string().optional(),
+    client_id: z.string().optional(),
+    auth_uri: z.string().optional(),
+    token_uri: z.string().optional(),
+    auth_provider_x509_cert_url: z.string().optional(),
+    client_x509_cert_url: z.string().optional(),
+    universe_domain: z.string().optional(),
+  })
+  .strict()
+  .meta({ id: "GoogleServiceAccountCredentials" });
+
+/** Vertex provider options passed to the AI SDK constructor */
+export const GoogleVertexProviderOptionsSchema = z
+  .object({
+    project: z.string().optional().meta({
+      description: "Google Cloud project ID for Vertex AI",
+      example: "my-gcp-project",
+    }),
+    location: z.string().optional().meta({
+      description: "Google Cloud location for Vertex AI",
+      example: "us-central1",
+    }),
+    headers: z
+      .record(z.string(), z.string())
       .optional()
       .meta({
-        description:
-          "AI provider for the model (or provide a baseURL endpoint instead)",
-        example: "openai",
+        description: "Custom headers for Vertex AI requests",
+        example: { "X-Goog-Priority": "high" },
       }),
-    modelName: z.string().meta({
-      description:
-        "Model name string with provider prefix (e.g., 'openai/gpt-5-nano')",
-      example: "openai/gpt-5-nano",
+    googleAuthOptions: z
+      .object({
+        credentials: GoogleServiceAccountCredentialsSchema.optional(),
+      })
+      .strict()
+      .optional()
+      .meta({
+        description: "Optional Google auth options for Vertex AI",
+      }),
+  })
+  .strict()
+  .meta({ id: "GoogleVertexProviderOptions" });
+
+/** Provider-specific options passed to the AI SDK constructor */
+export const ProviderOptionsSchema = z
+  .union([BedrockProviderOptionsSchema, GoogleVertexProviderOptionsSchema])
+  .meta({
+    id: "ProviderOptions",
+    description:
+      "Provider-specific options passed through to the AI SDK provider constructor. " +
+      "For Bedrock: { region, accessKeyId, secretAccessKey, sessionToken }. " +
+      "For Vertex: { project, location, googleAuthOptions }.",
+  });
+
+const ModelProviderSchema = z.enum([
+  "openai",
+  "anthropic",
+  "google",
+  "microsoft",
+  "bedrock",
+]);
+
+const modelConfigSharedShape = {
+  provider: ModelProviderSchema.optional().meta({
+    description:
+      "AI provider for the model (or provide a baseURL endpoint instead)",
+    example: "openai",
+  }),
+  modelName: z.string().meta({
+    description:
+      "Model name string with provider prefix (e.g., 'openai/gpt-5-nano')",
+    example: "openai/gpt-5-nano",
+  }),
+  baseURL: z.string().url().optional().meta({
+    description: "Base URL for the model provider",
+    example: "https://api.openai.com/v1",
+  }),
+  headers: z
+    .record(z.string(), z.string())
+    .optional()
+    .meta({
+      description: "Custom headers for the model provider",
+      example: { "X-Custom-Header": "value" },
     }),
+} as const;
+
+const modelClientOptionsSharedShape = {
+  baseURL: z.string().url().optional().meta({
+    description: "Base URL for the model provider",
+    example: "https://api.openai.com/v1",
+  }),
+  headers: z
+    .record(z.string(), z.string())
+    .optional()
+    .meta({
+      description: "Custom headers for the model provider",
+      example: { "X-Custom-Header": "value" },
+    }),
+} as const;
+
+const bedrockModelNameSchema = z
+  .string()
+  .refine((value) => value.startsWith("bedrock/"), {
+    message:
+      "Bedrock model configs must use a modelName prefixed with 'bedrock/'.",
+  })
+  .meta({
+    description:
+      "Model name string with provider prefix (e.g., 'bedrock/amazon.nova-pro-v1:0')",
+    example: "bedrock/amazon.nova-pro-v1:0",
+  });
+
+const GenericModelConfigObjectSchema = z
+  .object({
+    ...modelConfigSharedShape,
     apiKey: z.string().optional().meta({
       description: "API key for the model provider",
       example: "sk-some-openai-api-key",
     }),
-    baseURL: z.string().url().optional().meta({
-      description: "Base URL for the model provider",
-      example: "https://api.openai.com/v1",
-    }),
-    headers: z.record(z.string(), z.string()).optional().meta({
-      description: "Custom headers for the model provider",
-      example: { "X-Custom-Header": "value" },
-    }),
-    providerOptions: z.record(z.string(), z.unknown()).optional().meta({
-      description:
-        "Provider-specific options passed through to the AI SDK provider constructor. " +
-        "For Bedrock: { region, accessKeyId, secretAccessKey, sessionToken }. " +
-        "For Vertex: { project, location, googleAuthOptions }.",
+    providerOptions: ProviderOptionsSchema.optional().meta({
       example: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
     }),
   })
+  .strict()
+  .superRefine((value, ctx) => {
+    const provider =
+      value.provider ??
+      (value.modelName.includes("/") ? value.modelName.split("/", 1)[0] : null);
+
+    if (provider !== "bedrock") {
+      return;
+    }
+
+    if (provider === "bedrock") {
+      ctx.addIssue({
+        code: z.ZodIssueCode.custom,
+        path: ["modelName"],
+        message:
+          "Bedrock model configs must use one of the explicit Bedrock auth shapes.",
+      });
+    }
+  })
+  .meta({ id: "GenericModelConfigObject" });
+
+const BedrockApiKeyModelConfigObjectSchema = z
+  .object({
+    ...modelConfigSharedShape,
+    provider: z.literal("bedrock").optional().meta({
+      description: "AI provider for the model",
+      example: "bedrock",
+    }),
+    modelName: bedrockModelNameSchema,
+    apiKey: z.string().meta({
+      description: "Short-term Bedrock API key for bearer-token auth",
+      example: "bedrock-short-term-api-key",
+    }),
+    providerOptions: BedrockApiKeyProviderOptionsSchema.meta({
+      example: { region: "us-east-1" },
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockApiKeyModelConfigObject" });
+
+const BedrockAwsCredentialsModelConfigObjectSchema = z
+  .object({
+    ...modelConfigSharedShape,
+    provider: z.literal("bedrock").optional().meta({
+      description: "AI provider for the model",
+      example: "bedrock",
+    }),
+    modelName: bedrockModelNameSchema,
+    providerOptions: BedrockAwsCredentialsProviderOptionsSchema.meta({
+      example: {
+        region: "us-east-1",
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      },
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockAwsCredentialsModelConfigObject" });
+
+/** Detailed model configuration object */
+export const ModelConfigObjectSchema = z
+  .union([
+    BedrockApiKeyModelConfigObjectSchema,
+    BedrockAwsCredentialsModelConfigObjectSchema,
+    GenericModelConfigObjectSchema,
+  ])
   .meta({ id: "ModelConfigObject" });
 
 /** Model configuration */
@@ -93,12 +294,57 @@ export const ModelConfigSchema = ModelConfigObjectSchema.meta({
 });
 
 /** Session-level model client options used when initializing the session model */
-export const ModelClientOptionsSchema = ModelConfigObjectSchema.omit({
-  modelName: true,
-  provider: true,
-}).meta({
-  id: "ModelClientOptions",
-});
+const GenericModelClientOptionsSchema = z
+  .object({
+    ...modelClientOptionsSharedShape,
+    apiKey: z.string().optional().meta({
+      description: "API key for the model provider",
+      example: "sk-some-openai-api-key",
+    }),
+    providerOptions: ProviderOptionsSchema.optional().meta({
+      example: { region: "us-east-1", accessKeyId: "AKIAIOSFODNN7EXAMPLE" },
+    }),
+  })
+  .strict()
+  .meta({ id: "GenericModelClientOptions" });
+
+const BedrockApiKeyModelClientOptionsSchema = z
+  .object({
+    ...modelClientOptionsSharedShape,
+    apiKey: z.string().meta({
+      description: "Short-term Bedrock API key for bearer-token auth",
+      example: "bedrock-short-term-api-key",
+    }),
+    providerOptions: BedrockApiKeyProviderOptionsSchema.meta({
+      example: { region: "us-east-1" },
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockApiKeyModelClientOptions" });
+
+const BedrockAwsCredentialsModelClientOptionsSchema = z
+  .object({
+    ...modelClientOptionsSharedShape,
+    providerOptions: BedrockAwsCredentialsProviderOptionsSchema.meta({
+      example: {
+        region: "us-east-1",
+        accessKeyId: "AKIAIOSFODNN7EXAMPLE",
+        secretAccessKey: "secret",
+      },
+    }),
+  })
+  .strict()
+  .meta({ id: "BedrockAwsCredentialsModelClientOptions" });
+
+export const ModelClientOptionsSchema = z
+  .union([
+    BedrockApiKeyModelClientOptionsSchema,
+    BedrockAwsCredentialsModelClientOptionsSchema,
+    GenericModelClientOptionsSchema,
+  ])
+  .meta({
+    id: "ModelClientOptions",
+  });
 
 /** Action object returned by observe and used by act */
 export const ActionSchema = z

@@ -205,26 +205,12 @@ export class InMemorySessionStore implements SessionStore {
     loggerRef: { current?: (message: LogLine) => void },
   ): V3Options {
     const isBrowserbase = params.browserType === "browserbase";
-    const requestModelName =
-      typeof ctx.modelConfig?.modelName === "string"
-        ? ctx.modelConfig.modelName
-        : undefined;
-    const { modelName: _requestModelName, ...requestModelClientOptions } =
-      ctx.modelConfig ?? {};
-    const modelClientOptions = {
-      ...(params.modelClientOptions ?? {}),
-      ...requestModelClientOptions,
-    };
-
-    if (ctx.modelApiKey && modelClientOptions.apiKey === undefined) {
-      modelClientOptions.apiKey = ctx.modelApiKey;
-    }
 
     const options: V3Options = {
       env: isBrowserbase ? "BROWSERBASE" : "LOCAL",
       model: {
-        modelName: requestModelName ?? params.modelName,
-        ...modelClientOptions,
+        modelName: params.modelName,
+        apiKey: ctx.modelApiKey,
       },
       verbose: params.verbose,
       systemPrompt: params.systemPrompt,

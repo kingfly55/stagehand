@@ -44,7 +44,6 @@ async function main() {
       LocalBrowserLaunchOptions: Api.LocalBrowserLaunchOptionsSchema,
       ModelConfigObject: Api.ModelConfigObjectSchema,
       ModelConfig: Api.ModelConfigSchema,
-      ModelClientOptions: Api.ModelClientOptionsSchema,
       Action: Api.ActionSchema,
       SessionIdParams: Api.SessionIdParamsSchema,
       BrowserConfig: Api.BrowserConfigSchema,
@@ -145,7 +144,6 @@ Please try it and give us your feedback, stay tuned for upcoming release announc
       },
       security: [
         { BrowserbaseApiKey: [], BrowserbaseProjectId: [], ModelApiKey: [] },
-        { BrowserbaseApiKey: [], BrowserbaseProjectId: [] },
       ],
     },
     ...fastifyZodOpenApiTransformers,

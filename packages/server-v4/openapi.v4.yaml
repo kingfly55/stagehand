@@ -37,8 +37,7 @@ components:
       type: apiKey
       in: header
       name: x-model-api-key
-      description: Fallback API key for the AI model provider when auth is not
-        supplied in the request body
+      description: API key for the AI model provider (OpenAI, Anthropic, etc.)
   links:
     SessionAct:
       operationId: SessionAct
@@ -194,64 +193,10 @@ components:
           example: https://api.openai.com/v1
           type: string
           format: uri
-        headers:
-          description: Custom headers for the model provider
-          example:
-            X-Custom-Header: value
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties:
-            type: string
-        providerOptions:
-          description: "Provider-specific options passed through to the AI SDK provider
-            constructor. For Bedrock: { region, accessKeyId, secretAccessKey,
-            sessionToken }. For Vertex: { project, location, googleAuthOptions
-            }."
-          example:
-            region: us-east-1
-            accessKeyId: AKIAIOSFODNN7EXAMPLE
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties: {}
       required:
         - modelName
     ModelConfig:
       $ref: "#/components/schemas/ModelConfigObject"
-    ModelClientOptions:
-      type: object
-      properties:
-        apiKey:
-          description: API key for the model provider
-          example: sk-some-openai-api-key
-          type: string
-        baseURL:
-          description: Base URL for the model provider
-          example: https://api.openai.com/v1
-          type: string
-          format: uri
-        headers:
-          description: Custom headers for the model provider
-          example:
-            X-Custom-Header: value
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties:
-            type: string
-        providerOptions:
-          description: "Provider-specific options passed through to the AI SDK provider
-            constructor. For Bedrock: { region, accessKeyId, secretAccessKey,
-            sessionToken }. For Vertex: { project, location, googleAuthOptions
-            }."
-          example:
-            region: us-east-1
-            accessKeyId: AKIAIOSFODNN7EXAMPLE
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties: {}
     Action:
       description: Action object returned by observe and used by act
       type: object
@@ -468,10 +413,6 @@ components:
           description: Model name to use for AI operations
           example: openai/gpt-4o
           type: string
-        modelClientOptions:
-          description: Optional provider-specific configuration for the session model (for
-            example Bedrock region and credentials)
-          $ref: "#/components/schemas/ModelClientOptions"
         domSettleTimeoutMs:
           description: Timeout in ms to wait for DOM to settle
           example: 5000
@@ -1241,66 +1182,11 @@ components:
           example: https://api.openai.com/v1
           type: string
           format: uri
-        headers:
-          description: Custom headers for the model provider
-          example:
-            X-Custom-Header: value
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties:
-            type: string
-        providerOptions:
-          description: "Provider-specific options passed through to the AI SDK provider
-            constructor. For Bedrock: { region, accessKeyId, secretAccessKey,
-            sessionToken }. For Vertex: { project, location, googleAuthOptions
-            }."
-          example:
-            region: us-east-1
-            accessKeyId: AKIAIOSFODNN7EXAMPLE
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties: {}
       required:
         - modelName
       additionalProperties: false
     ModelConfigOutput:
       $ref: "#/components/schemas/ModelConfigObjectOutput"
-    ModelClientOptionsOutput:
-      type: object
-      properties:
-        apiKey:
-          description: API key for the model provider
-          example: sk-some-openai-api-key
-          type: string
-        baseURL:
-          description: Base URL for the model provider
-          example: https://api.openai.com/v1
-          type: string
-          format: uri
-        headers:
-          description: Custom headers for the model provider
-          example:
-            X-Custom-Header: value
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties:
-            type: string
-        providerOptions:
-          description: "Provider-specific options passed through to the AI SDK provider
-            constructor. For Bedrock: { region, accessKeyId, secretAccessKey,
-            sessionToken }. For Vertex: { project, location, googleAuthOptions
-            }."
-          example:
-            region: us-east-1
-            accessKeyId: AKIAIOSFODNN7EXAMPLE
-          type: object
-          propertyNames:
-            type: string
-          additionalProperties: {}
-      additionalProperties: false
     ActionOutput:
       description: Action object returned by observe and used by act
       type: object
@@ -2269,5 +2155,3 @@ security:
   - BrowserbaseApiKey: []
     BrowserbaseProjectId: []
     ModelApiKey: []
-  - BrowserbaseApiKey: []
-    BrowserbaseProjectId: []
