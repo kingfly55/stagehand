@@ -126,6 +126,10 @@ export type ClientOptions = {
   temperature?: number;
 };
 
-export type ModelConfiguration =
-  | AvailableModel
-  | (ClientOptions & { modelName: AvailableModel });
+export interface ModelConfigObject
+  extends ClientOptions,
+    Record<string, unknown> {
+  modelName: AvailableModel;
+}
+
+export type ModelConfiguration = AvailableModel | ModelConfigObject;
