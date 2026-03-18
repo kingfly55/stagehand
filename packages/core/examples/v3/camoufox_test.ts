@@ -8,14 +8,39 @@
  *   2. CDP bridge availability (newCDPSession — required by Stagehand's page bridge)
  *   3. Stagehand integration (only runs if CDP bridge works)
  *
- * Set OPENAI_API_KEY in env before running stage 3.
+ * Required env vars (set in .env at repo root or export in shell):
+ *   CAMOUFOX_WS   — WebSocket URL printed by camoufox on startup
+ *                   e.g. ws://localhost:42797/9e2abceb2cbd8d8595f441890e50815f
+ *
+ * Optional env vars:
+ *   OPENROUTER_API_KEY — OpenRouter key (preferred)
+ *   OPENAI_API_KEY     — OpenAI key (fallback)
+ *   STAGEHAND_MODEL    — OpenRouter model ID (default: google/gemini-2.5-pro)
+ *
+ * Example .env:
+ *   CAMOUFOX_WS=ws://localhost:42797/<token>
+ *   OPENROUTER_API_KEY=sk-or-...
  */
 
 import { chromium } from "playwright-core";
 import { Stagehand } from "../../lib/v3/index.js";
 import { z } from "zod";
 
-const WS_ENDPOINT = "ws://localhost:42797/9e2abceb2cbd8d8595f441890e50815f";
+const WS_ENDPOINT = process.env["CAMOUFOX_WS"] ?? "";
+if (!WS_ENDPOINT) {
+  console.error(
+    "ERROR: CAMOUFOX_WS not set.\n" +
+    "Start camoufox and copy the WebSocket URL it prints, then:\n" +
+    "  export CAMOUFOX_WS=ws://localhost:<port>/<token>\n" +
+    "or add it to .env at the repo root.",
+  );
+  process.exit(1);
+}
+
+const OPENROUTER_KEY = process.env["OPENROUTER_API_KEY"] ?? "";
+const OPENAI_KEY    = process.env["OPENAI_API_KEY"] ?? "";
+const MODEL_NAME    = process.env["STAGEHAND_MODEL"] ?? "google/gemini-2.5-pro";
+
 const TEST_URL = "https://example.com";
 
 function log(stage: string, msg: string) {
@@ -85,13 +110,28 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
     "Initialising Stagehand with env:LOCAL + cdpUrl = WS_ENDPOINT …",
   );
 
+  // ModelConfiguration: string (model name only) OR { modelName, ...ClientOptions }
+  // Use the object form so we can inject baseURL for OpenRouter.
+  const hasKey = OPENROUTER_KEY || OPENAI_KEY;
+  if (!hasKey) {
+    log("STAGE 3", "SKIP — no LLM API key set (OPENROUTER_API_KEY or OPENAI_API_KEY).");
+    return;
+  }
+
+  const model = OPENROUTER_KEY
+    ? { modelName: MODEL_NAME as `${string}/${string}`, baseURL: "https://openrouter.ai/api/v1", apiKey: OPENROUTER_KEY }
+    : { modelName: MODEL_NAME as `${string}/${string}`, apiKey: OPENAI_KEY };
+
+  log("STAGE 3", `Using model: ${MODEL_NAME}`);
+
   // NOTE: WS_ENDPOINT here is the Playwright server URL. Stagehand's V3Context
   // expects a raw CDP WebSocket URL. If camoufox exposes one separately, substitute
   // it here. This will tell us whether the raw CDP endpoint is also accessible.
+  // Phase 5 will rewrite this init to use browserContext: pwPage.context() instead.
   const stagehand = new Stagehand({
     env: "LOCAL",
     verbose: 1,
-    model: "openai/gpt-4.1-mini",
+    model,
     localBrowserLaunchOptions: {
       cdpUrl: WS_ENDPOINT, // will fail if not a raw CDP endpoint
     },
