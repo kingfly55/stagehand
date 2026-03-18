@@ -68,6 +68,7 @@ function buildFakePage(opts?: {
     goBack: vi.fn().mockResolvedValue(null),
     goForward: vi.fn().mockResolvedValue(null),
     waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    waitForSelector: vi.fn().mockResolvedValue(undefined),
     evaluate: vi.fn().mockResolvedValue(undefined),
     screenshot: vi.fn().mockResolvedValue(Buffer.from("")),
     addInitScript: vi.fn().mockResolvedValue(undefined),
