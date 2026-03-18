@@ -8,7 +8,6 @@ import {
 } from "../../utils.js";
 import { v3Logger } from "../logger.js";
 import { V3FunctionName } from "../types/public/methods.js";
-import { captureHybridSnapshot } from "../understudy/a11y/snapshot/index.js";
 import type { ZodTypeAny } from "zod";
 import { LLMClient } from "../llm/LLMClient.js";
 import { ExtractHandlerParams } from "../types/private/handlers.js";
@@ -123,7 +122,7 @@ export class ExtractHandler {
     if (noArgs) {
       const focusSelector = selector?.replace(/^xpath=/i, "") ?? "";
       ensureTimeRemaining();
-      const snap = await captureHybridSnapshot(page, {
+      const snap = await page.captureSnapshot({
         experimental: this.experimental,
         focusSelector: focusSelector || undefined,
       });
@@ -144,7 +143,7 @@ export class ExtractHandler {
 
     // Build the hybrid snapshot (includes combinedTree; combinedUrlMap optional)
     ensureTimeRemaining();
-    const { combinedTree, combinedUrlMap } = await captureHybridSnapshot(page, {
+    const { combinedTree, combinedUrlMap } = await page.captureSnapshot({
       experimental: this.experimental,
       focusSelector: focusSelector,
     });

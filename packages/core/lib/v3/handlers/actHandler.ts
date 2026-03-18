@@ -7,7 +7,6 @@ import { ActHandlerParams } from "../types/private/handlers.js";
 import { ActResult, Action, V3FunctionName } from "../types/public/methods.js";
 import { ActTimeoutError } from "../types/public/sdkErrors.js";
 import {
-  captureHybridSnapshot,
   diffCombinedTrees,
 } from "../understudy/a11y/snapshot/index.js";
 import { LLMClient } from "../llm/LLMClient.js";
@@ -19,11 +18,7 @@ import {
   ModelConfiguration,
 } from "../types/public/model.js";
 import type { Variables } from "../types/public/agent.js";
-import type { Page } from "../understudy/page.js";
-import {
-  performUnderstudyMethod,
-  waitForDomNetworkQuiet,
-} from "./handlerUtils/actHandlerUtils.js";
+import type { IStagehandPage, ResolvedAction } from "../types/private/IStagehandPage.js";
 import { createTimeoutGuard } from "./handlerUtils/timeoutGuard.js";
 import { resolveVariableValue } from "../agent/utils/variables.js";
 
@@ -144,13 +139,9 @@ export class ActHandler {
     );
 
     ensureTimeRemaining();
-    await waitForDomNetworkQuiet(
-      page.mainFrame(),
-      this.defaultDomSettleTimeoutMs,
-    );
+    await page.waitForNetworkIdle(this.defaultDomSettleTimeoutMs);
     ensureTimeRemaining();
-    const { combinedTree, combinedXpathMap } = await captureHybridSnapshot(
-      page,
+    const { combinedTree, combinedXpathMap } = await page.captureSnapshot(
       { experimental: true },
     );
 
@@ -202,7 +193,7 @@ export class ActHandler {
     // Take a new focused snapshot and observe again
     ensureTimeRemaining();
     const { combinedTree: combinedTree2, combinedXpathMap: combinedXpathMap2 } =
-      await captureHybridSnapshot(page, {
+      await page.captureSnapshot({
         experimental: true,
       });
 
@@ -267,7 +258,7 @@ export class ActHandler {
 
   async takeDeterministicAction(
     action: Action,
-    page: Page,
+    page: IStagehandPage,
     domSettleTimeoutMs?: number,
     llmClientOverride?: LLMClient,
     ensureTimeRemaining?: () => void,
@@ -303,14 +294,12 @@ export class ActHandler {
 
     try {
       ensureTimeRemaining?.();
-      await performUnderstudyMethod(
-        page,
-        page.mainFrame(),
+      await page.performAction({
         method,
-        action.selector,
-        resolvedArgs,
-        settleTimeout,
-      );
+        selector: action.selector,
+        args: resolvedArgs,
+        domSettleTimeoutMs: settleTimeout,
+      });
       return {
         success: true,
         message: `Action [${method}] performed successfully on selector: ${action.selector}`,
@@ -357,7 +346,7 @@ export class ActHandler {
           // Take a fresh snapshot and ask for a new actionable element
           ensureTimeRemaining?.();
           const { combinedTree, combinedXpathMap } =
-            await captureHybridSnapshot(page, {
+            await page.captureSnapshot({
               experimental: true,
             });
 
@@ -395,14 +384,12 @@ export class ActHandler {
           }
 
           ensureTimeRemaining?.();
-          await performUnderstudyMethod(
-            page,
-            page.mainFrame(),
+          await page.performAction({
             method,
-            newSelector,
-            resolvedArgs,
-            settleTimeout,
-          );
+            selector: newSelector,
+            args: resolvedArgs,
+            domSettleTimeoutMs: settleTimeout,
+          });
 
           return {
             success: true,

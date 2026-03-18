@@ -3,7 +3,6 @@ import { observe as runObserve } from "../../inference.js";
 import { trimTrailingTextNode } from "../../utils.js";
 import { v3Logger } from "../logger.js";
 import { V3FunctionName } from "../types/public/methods.js";
-import { captureHybridSnapshot } from "../understudy/a11y/snapshot/index.js";
 import { LLMClient } from "../llm/LLMClient.js";
 import {
   ObserveHandlerParams,
@@ -92,7 +91,7 @@ export class ObserveHandler {
     // Build the hybrid snapshot (a11y-centric text tree + lookup maps)
     const focusSelector = selector?.replace(/^xpath=/i, "") ?? "";
     ensureTimeRemaining();
-    const snapshot = await captureHybridSnapshot(page, {
+    const snapshot = await page.captureSnapshot({
       experimental: this.experimental,
       focusSelector: focusSelector || undefined,
     });
