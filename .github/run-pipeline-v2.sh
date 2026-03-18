@@ -522,7 +522,7 @@ pnpm build:esm && pnpm test:native
 # Phase 5 specific: camoufox probe (Stage 3 must say PASS)
 # Source .env and run in same shell invocation so CAMOUFOX_WS is available.
 cd /home/joenathan/stagehand/packages/core
-bash -c 'source /home/joenathan/stagehand/.env 2>/dev/null; pnpm example v3/camoufox_test' 2>&1 | tee /tmp/camoufox_result.txt
+bash -c 'set -a; source /home/joenathan/stagehand/.env 2>/dev/null || true; set +a; pnpm example v3/camoufox_test' 2>&1 | tee /tmp/camoufox_result.txt
 if grep -q "STAGE 3.*PASS\|Stage 3.*PASS" /tmp/camoufox_result.txt; then
   echo "CAMOUFOX_STAGE3_PASS"
 else
