@@ -61,6 +61,17 @@ export interface IStagehandPage {
   // Init scripts — generic form matching Page exactly
   addInitScript<Arg>(script: InitScriptSource<Arg>, arg?: Arg): Promise<void>;
 
+  // Selector wait — required by ActCache.utils.waitForCachedSelector.
+  // Return type is Promise<boolean | void> to be compatible with both the CDP
+  // Page (returns boolean) and PlaywrightNativePage (returns void).
+  waitForSelector(
+    selector: string,
+    opts?: {
+      timeout?: number;
+      state?: "attached" | "detached" | "visible" | "hidden";
+    },
+  ): Promise<boolean | void>;
+
   // Close
   close(): Promise<void>;
 }

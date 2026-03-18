@@ -26,7 +26,7 @@ import type {
   AvailableModel,
   Logger,
 } from "../types/public/index.js";
-import type { Page } from "../understudy/page.js";
+import type { IStagehandPage } from "../types/private/IStagehandPage.js";
 import type { V3Context } from "../understudy/context.js";
 import { CacheStorage } from "./CacheStorage.js";
 import {
@@ -143,7 +143,7 @@ export class AgentCache {
     instruction: string;
     options: SanitizedAgentExecuteOptions;
     configSignature: string;
-    page: Page;
+    page: IStagehandPage;
     variables?: Record<string, string>;
   }): Promise<AgentCacheContext | null> {
     if (!this.shouldAttemptCache(params.instruction)) {

@@ -11,7 +11,8 @@ export type InitState =
       createdTempProfile?: boolean;
       preserveUserDataDir?: boolean;
     }
-  | { kind: "BROWSERBASE"; bb: Browserbase; sessionId: string; ws: string };
+  | { kind: "BROWSERBASE"; bb: Browserbase; sessionId: string; ws: string }
+  | { kind: "PLAYWRIGHT_NATIVE" };
 
 export type EncodedId = `${number}-${number}`;
 

@@ -1,5 +1,5 @@
 import type { Logger } from "../types/public/index.js";
-import { Page } from "../understudy/page.js";
+import type { IStagehandPage } from "../types/private/IStagehandPage.js";
 
 const DEFAULT_WAIT_TIMEOUT_MS = 15000;
 
@@ -7,7 +7,7 @@ export function cloneForCache<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-export async function safeGetPageUrl(page: Page): Promise<string> {
+export async function safeGetPageUrl(page: IStagehandPage): Promise<string> {
   try {
     return page.url();
   } catch {
@@ -20,7 +20,7 @@ export async function safeGetPageUrl(page: Page): Promise<string> {
  * Logs a warning and proceeds if the wait times out (non-blocking).
  */
 export async function waitForCachedSelector(params: {
-  page: Page;
+  page: IStagehandPage;
   selector: string | undefined;
   timeout: number | undefined;
   logger: Logger;

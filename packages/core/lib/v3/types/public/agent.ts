@@ -25,6 +25,7 @@ import { Page as PlaywrightPage } from "playwright-core";
 import { Page as PuppeteerPage } from "puppeteer-core";
 import { Page as PatchrightPage } from "patchright-core";
 import { Page } from "../../understudy/page.js";
+import { PlaywrightNativePage } from "../../understudy/native/PlaywrightNativePage.js";
 
 // =============================================================================
 // Variable Types
@@ -272,7 +273,7 @@ export interface AgentStreamCallbacks extends AgentCallbacks {
 export interface AgentExecuteOptionsBase {
   instruction: string;
   maxSteps?: number;
-  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page;
+  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page | PlaywrightNativePage;
   highlightCursor?: boolean;
   /**
    * Previous conversation messages to continue from.
