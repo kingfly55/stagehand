@@ -55,6 +55,12 @@ import {
   type ScreenshotCleanup,
 } from "./screenshotUtils.js";
 import { InitScriptSource } from "../types/private/index.js";
+import type { HybridSnapshot, SnapshotOptions } from "../types/private/snapshot.js";
+import type { ResolvedAction, IStagehandPage } from "../types/private/IStagehandPage.js";
+import {
+  performUnderstudyMethod,
+  waitForDomNetworkQuiet,
+} from "../handlers/handlerUtils/actHandlerUtils.js";
 import { withTimeout } from "../timeoutConfig.js";
 
 /**
@@ -646,6 +652,31 @@ export class Page {
 
   public mainFrame(): Frame {
     return this.mainFrameWrapper;
+  }
+
+  // Delegates to captureHybridSnapshot free function.
+  // captureHybridSnapshot is a CDP-only free function and must never be called
+  // from outside Page with an IStagehandPage reference — it takes concrete Page.
+  async captureSnapshot(opts?: SnapshotOptions): Promise<HybridSnapshot> {
+    return captureHybridSnapshot(this, opts);
+  }
+
+  // Delegates to performUnderstudyMethod free function.
+  // actHandlerUtils.ts remains unchanged; it is called only from here.
+  async performAction(action: ResolvedAction): Promise<void> {
+    await performUnderstudyMethod(
+      this,
+      this.mainFrame(),
+      action.method,
+      action.selector,
+      action.args,
+      action.domSettleTimeoutMs,
+    );
+  }
+
+  // Delegates to waitForDomNetworkQuiet free function.
+  async waitForNetworkIdle(domSettleTimeoutMs?: number): Promise<void> {
+    await waitForDomNetworkQuiet(this.mainFrame(), domSettleTimeoutMs);
   }
 
   /**
@@ -2379,3 +2410,7 @@ export class Page {
     });
   }
 }
+
+// Compile-time proof that Page structurally satisfies IStagehandPage.
+// If this line errors, the interface has a mismatch — fix the interface, not this line.
+const _pageInterfaceCheck: IStagehandPage = null as unknown as Page;

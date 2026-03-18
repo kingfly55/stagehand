@@ -1,14 +1,14 @@
-import { Page } from "../../understudy/page.js";
 import { ModelConfiguration } from "../public/model.js";
 import type { StagehandZodSchema } from "../../zodCompat.js";
 import type { Variables } from "../public/agent.js";
+import type { IStagehandPage } from "./IStagehandPage.js";
 
 export interface ActHandlerParams {
   instruction: string;
   model?: ModelConfiguration;
   variables?: Variables;
   timeout?: number;
-  page: Page;
+  page: IStagehandPage;
 }
 
 export interface ExtractHandlerParams<T extends StagehandZodSchema> {
@@ -17,7 +17,7 @@ export interface ExtractHandlerParams<T extends StagehandZodSchema> {
   model?: ModelConfiguration;
   timeout?: number;
   selector?: string;
-  page: Page;
+  page: IStagehandPage;
 }
 
 export interface ObserveHandlerParams {
@@ -25,7 +25,7 @@ export interface ObserveHandlerParams {
   model?: ModelConfiguration;
   timeout?: number;
   selector?: string;
-  page: Page;
+  page: IStagehandPage;
 }
 
 // We can use this enum to list the actions supported in performUnderstudyMethod

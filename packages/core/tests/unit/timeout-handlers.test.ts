@@ -2,12 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { ActHandler } from "../../lib/v3/handlers/actHandler.js";
 import { ExtractHandler } from "../../lib/v3/handlers/extractHandler.js";
 import { ObserveHandler } from "../../lib/v3/handlers/observeHandler.js";
-import type { Page } from "../../lib/v3/understudy/page.js";
+import type { IStagehandPage } from "../../lib/v3/types/private/IStagehandPage.js";
 import type { ClientOptions } from "../../lib/v3/types/public/model.js";
 import type { LLMClient } from "../../lib/v3/llm/LLMClient.js";
 import { createTimeoutGuard } from "../../lib/v3/handlers/handlerUtils/timeoutGuard.js";
-import { waitForDomNetworkQuiet } from "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js";
-import { captureHybridSnapshot } from "../../lib/v3/understudy/a11y/snapshot/index.js";
 import {
   ActTimeoutError,
   ExtractTimeoutError,
@@ -24,6 +22,7 @@ vi.mock("../../lib/v3/handlers/handlerUtils/timeoutGuard", () => ({
   createTimeoutGuard: vi.fn(),
 }));
 
+// actHandlerUtils mock kept for compatibility; handlers no longer call these directly
 vi.mock("../../lib/v3/handlers/handlerUtils/actHandlerUtils", () => ({
   waitForDomNetworkQuiet: vi.fn(),
   performUnderstudyMethod: vi.fn(),
@@ -31,6 +30,7 @@ vi.mock("../../lib/v3/handlers/handlerUtils/actHandlerUtils", () => ({
 
 vi.mock("../../lib/v3/understudy/a11y/snapshot", () => ({
   captureHybridSnapshot: vi.fn(),
+  // diffCombinedTrees is still called directly by actHandler.ts
   diffCombinedTrees: vi.fn(),
 }));
 
@@ -40,22 +40,47 @@ vi.mock("../../lib/inference", () => ({
   observe: vi.fn(),
 }));
 
+type FakePage = IStagehandPage & {
+  captureSnapshot: ReturnType<typeof vi.fn>;
+  waitForNetworkIdle: ReturnType<typeof vi.fn>;
+  performAction: ReturnType<typeof vi.fn>;
+};
+
+function buildFakePage(opts?: {
+  captureSnapshotResult?: {
+    combinedTree: string;
+    combinedXpathMap: Record<string, string>;
+    combinedUrlMap: Record<string, string>;
+  };
+}): FakePage {
+  const snapshotResult = opts?.captureSnapshotResult ?? {
+    combinedTree: "",
+    combinedXpathMap: {},
+    combinedUrlMap: {},
+  };
+  return {
+    captureSnapshot: vi.fn().mockResolvedValue(snapshotResult),
+    waitForNetworkIdle: vi.fn().mockResolvedValue(undefined),
+    performAction: vi.fn().mockResolvedValue(undefined),
+    url: vi.fn().mockReturnValue(""),
+    goto: vi.fn().mockResolvedValue(null),
+    reload: vi.fn().mockResolvedValue(null),
+    goBack: vi.fn().mockResolvedValue(null),
+    goForward: vi.fn().mockResolvedValue(null),
+    waitForLoadState: vi.fn().mockResolvedValue(undefined),
+    evaluate: vi.fn().mockResolvedValue(undefined),
+    screenshot: vi.fn().mockResolvedValue(Buffer.from("")),
+    addInitScript: vi.fn().mockResolvedValue(undefined),
+    close: vi.fn().mockResolvedValue(undefined),
+  } as FakePage;
+}
+
 describe("ActHandler timeout guard", () => {
   beforeEach(() => {
     vi.clearAllMocks();
   });
 
   it("throws ActTimeoutError when timeout expires before snapshot", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     // Make createTimeoutGuard return a guard that throws on call #2
     vi.mocked(createTimeoutGuard).mockImplementation(
       (timeoutMs, errorFactory) => {
@@ -72,9 +97,7 @@ describe("ActHandler timeout guard", () => {
     );
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage();
 
     await expect(
       handler.act({
@@ -85,22 +108,12 @@ describe("ActHandler timeout guard", () => {
     ).rejects.toThrow(ActTimeoutError);
 
     // Verify pre-timeout helper ran
-    expect(waitForDomNetworkQuietMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.waitForNetworkIdle).toHaveBeenCalledTimes(1);
     // Verify snapshot was NOT called (timeout fired before it)
-    expect(captureHybridSnapshotMock).not.toHaveBeenCalled();
+    expect(fakePage.captureSnapshot).not.toHaveBeenCalled();
   });
 
   it("throws ActTimeoutError when timeout expires before LLM call", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const actInferenceMock = vi.mocked(actInference);
 
     // Throw on call #3 (after snapshot but before LLM)
@@ -119,9 +132,13 @@ describe("ActHandler timeout guard", () => {
     );
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.act({
@@ -132,15 +149,12 @@ describe("ActHandler timeout guard", () => {
     ).rejects.toThrow(ActTimeoutError);
 
     // Snapshot should have been called
-    expect(captureHybridSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.captureSnapshot).toHaveBeenCalledTimes(1);
     // LLM inference should NOT have been called
     expect(actInferenceMock).not.toHaveBeenCalled();
   });
 
   it("throws ActTimeoutError with correct message format", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
     const timeoutMs = 100;
 
     vi.mocked(createTimeoutGuard).mockImplementation((ms, errorFactory) => {
@@ -150,9 +164,7 @@ describe("ActHandler timeout guard", () => {
     });
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage();
 
     try {
       await handler.act({
@@ -176,22 +188,6 @@ describe("ActHandler two-step timeout", () => {
   });
 
   it("throws ActTimeoutError during step 2; step 2 action does not run", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    performUnderstudyMethodMock.mockResolvedValue(undefined);
-
     const actInferenceMock = vi.mocked(actInference);
     // First call returns a two-step action
     actInferenceMock.mockResolvedValueOnce({
@@ -215,7 +211,7 @@ describe("ActHandler two-step timeout", () => {
 
     // Timeout fires after step 1 completes, during step 2 snapshot
     // ensureTimeRemaining calls: 1=before wait, 2=after wait/before snap1, 3=before LLM1,
-    // 4=before action1, 5=inside takeDeterministicAction, 6=performUnderstudy,
+    // 4=before action1, 5=inside takeDeterministicAction, 6=performAction,
     // 7=before snap2 (this one should throw)
     let callCount = 0;
     vi.mocked(createTimeoutGuard).mockImplementation(
@@ -232,9 +228,13 @@ describe("ActHandler two-step timeout", () => {
     );
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.act({
@@ -245,7 +245,7 @@ describe("ActHandler two-step timeout", () => {
     ).rejects.toThrow(ActTimeoutError);
 
     // Step 1 action should have been executed
-    expect(performUnderstudyMethodMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.performAction).toHaveBeenCalledTimes(1);
     // Step 2 LLM call should NOT have happened
     expect(actInferenceMock).toHaveBeenCalledTimes(1);
   });
@@ -257,25 +257,6 @@ describe("ActHandler self-heal timeout", () => {
   });
 
   it("throws ActTimeoutError during self-heal snapshot; no retry action executes", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    // First call fails, triggering self-heal
-    performUnderstudyMethodMock.mockRejectedValueOnce(
-      new Error("Element not found"),
-    );
-
     const actInferenceMock = vi.mocked(actInference);
     actInferenceMock.mockResolvedValue({
       element: {
@@ -307,9 +288,15 @@ describe("ActHandler self-heal timeout", () => {
     );
 
     const handler = buildActHandler({ selfHeal: true });
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
+    // First action attempt fails, triggering self-heal
+    fakePage.performAction.mockRejectedValueOnce(new Error("Element not found"));
 
     await expect(
       handler.act({
@@ -320,33 +307,14 @@ describe("ActHandler self-heal timeout", () => {
     ).rejects.toThrow(ActTimeoutError);
 
     // First action attempt should have been tried
-    expect(performUnderstudyMethodMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.performAction).toHaveBeenCalledTimes(1);
     // First LLM call should have happened
     expect(actInferenceMock).toHaveBeenCalledTimes(1);
     // Self-heal snapshot should have been started (call happened)
-    expect(captureHybridSnapshotMock).toHaveBeenCalled();
+    expect(fakePage.captureSnapshot).toHaveBeenCalled();
   });
 
   it("throws ActTimeoutError during self-heal LLM inference; no retry action executes", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    // First call fails, triggering self-heal
-    performUnderstudyMethodMock.mockRejectedValueOnce(
-      new Error("Element not found"),
-    );
-
     const actInferenceMock = vi.mocked(actInference);
     actInferenceMock.mockResolvedValueOnce({
       element: {
@@ -378,9 +346,15 @@ describe("ActHandler self-heal timeout", () => {
     );
 
     const handler = buildActHandler({ selfHeal: true });
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
+    // First call fails, triggering self-heal
+    fakePage.performAction.mockRejectedValueOnce(new Error("Element not found"));
 
     await expect(
       handler.act({
@@ -390,8 +364,8 @@ describe("ActHandler self-heal timeout", () => {
       }),
     ).rejects.toThrow(ActTimeoutError);
 
-    // Self-heal snapshot was captured
-    expect(captureHybridSnapshotMock).toHaveBeenCalledTimes(2);
+    // Self-heal snapshot was captured twice (initial + self-heal)
+    expect(fakePage.captureSnapshot).toHaveBeenCalledTimes(2);
     // Only one LLM inference (the retry inference was aborted by timeout)
     expect(actInferenceMock).toHaveBeenCalledTimes(1);
   });
@@ -403,13 +377,6 @@ describe("ExtractHandler timeout guard", () => {
   });
 
   it("throws ExtractTimeoutError when timeout expires before snapshot", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const extractInferenceMock = vi.mocked(extractInference);
 
     // Throw immediately on first call
@@ -424,9 +391,13 @@ describe("ExtractHandler timeout guard", () => {
     );
 
     const handler = buildExtractHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.extract({
@@ -437,19 +408,12 @@ describe("ExtractHandler timeout guard", () => {
     ).rejects.toThrow(ExtractTimeoutError);
 
     // Snapshot should NOT have been called
-    expect(captureHybridSnapshotMock).not.toHaveBeenCalled();
+    expect(fakePage.captureSnapshot).not.toHaveBeenCalled();
     // LLM inference should NOT have been called
     expect(extractInferenceMock).not.toHaveBeenCalled();
   });
 
   it("throws ExtractTimeoutError when timeout expires before LLM call", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const extractInferenceMock = vi.mocked(extractInference);
 
     // Throw on call #2 (after snapshot but before LLM)
@@ -468,9 +432,13 @@ describe("ExtractHandler timeout guard", () => {
     );
 
     const handler = buildExtractHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.extract({
@@ -481,7 +449,7 @@ describe("ExtractHandler timeout guard", () => {
     ).rejects.toThrow(ExtractTimeoutError);
 
     // Snapshot should have been called
-    expect(captureHybridSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.captureSnapshot).toHaveBeenCalledTimes(1);
     // LLM inference should NOT have been called
     expect(extractInferenceMock).not.toHaveBeenCalled();
   });
@@ -496,9 +464,7 @@ describe("ExtractHandler timeout guard", () => {
     });
 
     const handler = buildExtractHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage();
 
     try {
       await handler.extract({
@@ -518,13 +484,6 @@ describe("ExtractHandler timeout guard", () => {
   });
 
   it("stops LLM and post-processing when timeout expires", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: { "1-0": "https://example.com" },
-    });
-
     const extractInferenceMock = vi.mocked(extractInference);
 
     // Allow snapshot but timeout before LLM
@@ -543,9 +502,13 @@ describe("ExtractHandler timeout guard", () => {
     );
 
     const handler = buildExtractHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: { "1-0": "https://example.com" },
+      },
+    });
 
     await expect(
       handler.extract({
@@ -566,13 +529,6 @@ describe("ObserveHandler timeout guard", () => {
   });
 
   it("throws ObserveTimeoutError when timeout expires before snapshot", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const observeInferenceMock = vi.mocked(observeInference);
 
     // Throw immediately on first call
@@ -587,9 +543,13 @@ describe("ObserveHandler timeout guard", () => {
     );
 
     const handler = buildObserveHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.observe({
@@ -600,19 +560,12 @@ describe("ObserveHandler timeout guard", () => {
     ).rejects.toThrow(ObserveTimeoutError);
 
     // Snapshot should NOT have been called
-    expect(captureHybridSnapshotMock).not.toHaveBeenCalled();
+    expect(fakePage.captureSnapshot).not.toHaveBeenCalled();
     // LLM inference should NOT have been called
     expect(observeInferenceMock).not.toHaveBeenCalled();
   });
 
   it("throws ObserveTimeoutError when timeout expires before LLM call", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const observeInferenceMock = vi.mocked(observeInference);
 
     // Throw on call #2 (after snapshot but before LLM)
@@ -631,9 +584,13 @@ describe("ObserveHandler timeout guard", () => {
     );
 
     const handler = buildObserveHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.observe({
@@ -644,7 +601,7 @@ describe("ObserveHandler timeout guard", () => {
     ).rejects.toThrow(ObserveTimeoutError);
 
     // Snapshot should have been called
-    expect(captureHybridSnapshotMock).toHaveBeenCalledTimes(1);
+    expect(fakePage.captureSnapshot).toHaveBeenCalledTimes(1);
     // LLM inference should NOT have been called
     expect(observeInferenceMock).not.toHaveBeenCalled();
   });
@@ -659,9 +616,7 @@ describe("ObserveHandler timeout guard", () => {
     });
 
     const handler = buildObserveHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage();
 
     try {
       await handler.observe({
@@ -681,13 +636,6 @@ describe("ObserveHandler timeout guard", () => {
   });
 
   it("aborts result processing when timeout expires", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
     const observeInferenceMock = vi.mocked(observeInference);
 
     // Timeout before LLM call
@@ -706,9 +654,13 @@ describe("ObserveHandler timeout guard", () => {
     );
 
     const handler = buildObserveHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     await expect(
       handler.observe({
@@ -729,22 +681,6 @@ describe("No-timeout success paths", () => {
   });
 
   it("act() completes successfully without timeout and records metrics", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    performUnderstudyMethodMock.mockResolvedValue(undefined);
-
     const actInferenceMock = vi.mocked(actInference);
     actInferenceMock.mockResolvedValue({
       element: {
@@ -770,9 +706,13 @@ describe("No-timeout success paths", () => {
 
     const metricsCallback = vi.fn();
     const handler = buildActHandler({ onMetrics: metricsCallback });
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     const result = await handler.act({
       instruction: "click button",
@@ -792,13 +732,6 @@ describe("No-timeout success paths", () => {
   });
 
   it("extract() completes successfully without timeout and records metrics", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: {},
-      combinedUrlMap: {},
-    });
-
     const extractInferenceMock = vi.mocked(extractInference);
     extractInferenceMock.mockResolvedValue({
       title: "Test Title",
@@ -821,9 +754,13 @@ describe("No-timeout success paths", () => {
 
     const metricsCallback = vi.fn();
     const handler = buildExtractHandler({ onMetrics: metricsCallback });
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: {},
+        combinedUrlMap: {},
+      },
+    });
 
     const result = await handler.extract({
       instruction: "extract title",
@@ -843,13 +780,6 @@ describe("No-timeout success paths", () => {
   });
 
   it("observe() completes successfully without timeout and records metrics", async () => {
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
     const observeInferenceMock = vi.mocked(observeInference);
     observeInferenceMock.mockResolvedValue({
       elements: [
@@ -876,9 +806,13 @@ describe("No-timeout success paths", () => {
 
     const metricsCallback = vi.fn();
     const handler = buildObserveHandler({ onMetrics: metricsCallback });
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     const result = await handler.observe({
       instruction: "find buttons",
@@ -899,22 +833,6 @@ describe("No-timeout success paths", () => {
   });
 
   it("act() with zero timeout behaves as no timeout", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    performUnderstudyMethodMock.mockResolvedValue(undefined);
-
     const actInferenceMock = vi.mocked(actInference);
     actInferenceMock.mockResolvedValue({
       element: {
@@ -942,9 +860,13 @@ describe("No-timeout success paths", () => {
     });
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     const result = await handler.act({
       instruction: "click button",
@@ -956,22 +878,6 @@ describe("No-timeout success paths", () => {
   });
 
   it("act() with negative timeout behaves as no timeout", async () => {
-    const waitForDomNetworkQuietMock = vi.mocked(waitForDomNetworkQuiet);
-    waitForDomNetworkQuietMock.mockResolvedValue(undefined);
-
-    const captureHybridSnapshotMock = vi.mocked(captureHybridSnapshot);
-    captureHybridSnapshotMock.mockResolvedValue({
-      combinedTree: "tree content",
-      combinedXpathMap: { "1-0": "/html/body/button" },
-      combinedUrlMap: {},
-    });
-
-    const { performUnderstudyMethod } = await import(
-      "../../lib/v3/handlers/handlerUtils/actHandlerUtils.js"
-    );
-    const performUnderstudyMethodMock = vi.mocked(performUnderstudyMethod);
-    performUnderstudyMethodMock.mockResolvedValue(undefined);
-
     const actInferenceMock = vi.mocked(actInference);
     actInferenceMock.mockResolvedValue({
       element: {
@@ -998,9 +904,13 @@ describe("No-timeout success paths", () => {
     });
 
     const handler = buildActHandler();
-    const fakePage = {
-      mainFrame: vi.fn().mockReturnValue({}),
-    } as unknown as Page;
+    const fakePage = buildFakePage({
+      captureSnapshotResult: {
+        combinedTree: "tree content",
+        combinedXpathMap: { "1-0": "/html/body/button" },
+        combinedUrlMap: {},
+      },
+    });
 
     const result = await handler.act({
       instruction: "click button",
