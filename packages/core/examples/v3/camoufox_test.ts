@@ -6,7 +6,7 @@
  * Tests three things in order:
  *   1. Playwright server connection (ws connect, not CDP)
  *   2. CDP bridge availability (newCDPSession — required by Stagehand's page bridge)
- *   3. Stagehand integration (only runs if CDP bridge works)
+ *   3. Stagehand integration (always runs; Stage 2 FAIL on camoufox is expected)
  *
  * Required env vars (set in .env at repo root or export in shell):
  *   CAMOUFOX_WS   — WebSocket URL printed by camoufox on startup
@@ -39,7 +39,8 @@ if (!WS_ENDPOINT) {
 
 const OPENROUTER_KEY = process.env["OPENROUTER_API_KEY"] ?? "";
 const OPENAI_KEY    = process.env["OPENAI_API_KEY"] ?? "";
-const MODEL_NAME    = process.env["STAGEHAND_MODEL"] ?? "google/gemini-2.5-pro";
+const MODEL_NAME    = process.env["STAGEHAND_MODEL"] ??
+  (OPENROUTER_KEY ? "google/gemini-2.5-pro" : "gpt-4.1-mini");
 
 const TEST_URL = "https://example.com";
 
@@ -92,22 +93,20 @@ async function stage2(page: Awaited<ReturnType<typeof stage1>>["page"]) {
     );
     log(
       "STAGE 2",
-      "To proceed, Stagehand would need a Juggler-native resolveTopFrameId path,\n" +
-        "         OR camoufox must expose a raw CDP endpoint you can pass via cdpUrl.\n",
+      "CDP bridge unavailable on Firefox/Juggler — this is expected.\n" +
+        "         Stage 3 bypasses CDP entirely via browserContext: pwPage.context().\n",
     );
     return null;
   }
 }
 
-// ── Stage 3: Stagehand integration (only runs if stage 2 passes) ──────────────
-// Stagehand must also have its own V3Context connected to the same browser.
-// The trick: launch Stagehand with env:"LOCAL" + cdpUrl = the raw CDP WebSocket URL.
-// If camoufox only exposes a Playwright server endpoint (not a raw CDP URL) this
-// init step will fail — which is useful information in itself.
+// ── Stage 3: Stagehand integration (always runs; Stage 2 FAIL on camoufox is expected) ─────
+// Uses browserContext: pwPage.context() — the native Playwright path built in phases 1-4.
+// Does NOT use CDP. env:"LOCAL" is required when providing browserContext.
 async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
   log(
     "STAGE 3",
-    "Initialising Stagehand with env:LOCAL + cdpUrl = WS_ENDPOINT …",
+    "Initialising Stagehand with browserContext: pwPage.context() …",
   );
 
   // ModelConfiguration: string (model name only) OR { modelName, ...ClientOptions }
@@ -118,23 +117,20 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
     return;
   }
 
+  // OpenRouter is OpenAI-compatible. Prefix model name with "openai/" so LLMProvider
+  // routes to createOpenAI(baseURL=openrouter) — not createGoogleGenerativeAI, which
+  // uses a different API format (generateContent) and returns 404 on OpenRouter.
   const model = OPENROUTER_KEY
-    ? { modelName: MODEL_NAME as `${string}/${string}`, baseURL: "https://openrouter.ai/api/v1", apiKey: OPENROUTER_KEY }
+    ? { modelName: `openai/${MODEL_NAME}` as `${string}/${string}`, baseURL: "https://openrouter.ai/api/v1", apiKey: OPENROUTER_KEY }
     : { modelName: MODEL_NAME as `${string}/${string}`, apiKey: OPENAI_KEY };
 
   log("STAGE 3", `Using model: ${MODEL_NAME}`);
 
-  // NOTE: WS_ENDPOINT here is the Playwright server URL. Stagehand's V3Context
-  // expects a raw CDP WebSocket URL. If camoufox exposes one separately, substitute
-  // it here. This will tell us whether the raw CDP endpoint is also accessible.
-  // Phase 5 will rewrite this init to use browserContext: pwPage.context() instead.
   const stagehand = new Stagehand({
     env: "LOCAL",
-    verbose: 1,
+    browserContext: pwPage.context(),
     model,
-    localBrowserLaunchOptions: {
-      cdpUrl: WS_ENDPOINT, // will fail if not a raw CDP endpoint
-    },
+    verbose: 1,
   });
 
   try {
@@ -150,13 +146,14 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
       "STAGE 3",
       "If camoufox exposes a separate CDP port (--remote-debugging-port), use that URL instead.\n",
     );
+    await stagehand.close().catch(() => {});
     return;
   }
 
   // If init worked, try passing the Playwright page to Stagehand.
   log("STAGE 3", "Running stagehand.observe() with the camoufox page …");
   try {
-    const observations = await stagehand.observe({ page: pwPage });
+    const observations = await stagehand.observe({ page: pwPage, timeout: 30_000 });
     log("STAGE 3", `observe() returned ${observations.length} elements.`);
     console.log(observations.slice(0, 3));
   } catch (err: unknown) {
@@ -170,7 +167,7 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
     const result = await stagehand.extract(
       "extract the page heading",
       z.string(),
-      { page: pwPage },
+      { page: pwPage, timeout: 30_000 },
     );
     log("STAGE 3", `extract() result: "${result}"`);
     log("STAGE 3", "PASS — full Stagehand integration works with camoufox!\n");
@@ -188,10 +185,8 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
   try {
     const { browser: b, page } = await stage1();
     browser = b;
-    const frameId = await stage2(page);
-    if (frameId !== null) {
-      await stage3(page);
-    }
+    await stage2(page);   // result intentionally discarded — Stage 2 FAIL is expected on camoufox
+    await stage3(page);   // always runs
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     console.error("Fatal error:", msg);
