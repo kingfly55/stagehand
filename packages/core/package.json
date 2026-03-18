@@ -103,7 +103,6 @@
     "ollama-ai-provider-v2": "^1.5.0",
     "patchright-core": "^1.55.2",
     "playwright": "^1.52.0",
-    "playwright-core": "^1.54.1",
     "puppeteer-core": "^22.8.0"
   },
   "devDependencies": {
@@ -118,7 +117,7 @@
     "eslint": "10.0.2",
     "jsdom": "^24.0.0",
     "playwright": "^1.52.0",
-    "playwright-core": "^1.54.1",
+    "playwright-core": "^1.58.2",
     "prettier": "^3.2.5",
     "tsx": "*",
     "vitest": "^4.0.8",
