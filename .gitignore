@@ -29,3 +29,4 @@ packages/core/test-results/
 coverage/
 ctrf/
 .stagehand-sea/
+.pipeline-logs/
