@@ -6,7 +6,7 @@
  * Tests three things in order:
  *   1. Playwright server connection (ws connect, not CDP)
  *   2. CDP bridge availability (newCDPSession — required by Stagehand's page bridge)
- *   3. Stagehand integration (always runs; Stage 2 FAIL on camoufox is expected)
+ *   3. Stagehand integration (always runs — bypasses CDP bridge via browserContext option)
  *
  * Required env vars (set in .env at repo root or export in shell):
  *   CAMOUFOX_WS   — WebSocket URL printed by camoufox on startup
@@ -63,6 +63,7 @@ async function stage1() {
   const page = pages.length > 0 ? pages[0] : await ctx.newPage();
 
   await page.goto(TEST_URL);
+  await page.waitForLoadState("domcontentloaded");
   const title = await page.title();
   log("STAGE 1", `Navigated to ${TEST_URL} — title: "${title}"`);
   log("STAGE 1", "PASS — basic Playwright connection works.\n");
@@ -122,7 +123,7 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
   // uses a different API format (generateContent) and returns 404 on OpenRouter.
   const model = OPENROUTER_KEY
     ? { modelName: `openai/${MODEL_NAME}` as `${string}/${string}`, baseURL: "https://openrouter.ai/api/v1", apiKey: OPENROUTER_KEY }
-    : { modelName: MODEL_NAME as `${string}/${string}`, apiKey: OPENAI_KEY };
+    : { modelName: (process.env["OPENAI_MODEL"] ?? "gpt-4.1-mini") as `${string}/${string}`, apiKey: OPENAI_KEY };
 
   log("STAGE 3", `Using model: ${MODEL_NAME}`);
 
@@ -169,8 +170,13 @@ async function stage3(pwPage: Awaited<ReturnType<typeof stage1>>["page"]) {
       z.string(),
       { page: pwPage, timeout: 30_000 },
     );
-    log("STAGE 3", `extract() result: "${result}"`);
-    log("STAGE 3", "PASS — full Stagehand integration works with camoufox!\n");
+    const resultStr = typeof result === "string" ? result : String(result ?? "");
+    log("STAGE 3", `extract() result: "${resultStr}"`);
+    if (!resultStr.toLowerCase().includes("example domain")) {
+      log("STAGE 3", `extract() FAIL — expected "example domain" in result, got: "${resultStr}"\n`);
+    } else {
+      log("STAGE 3", "PASS — full Stagehand integration works with camoufox!\n");
+    }
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : String(err);
     log("STAGE 3", `extract() FAILED: ${msg}\n`);
