@@ -43,6 +43,7 @@
     "example": "node --import tsx -e \"const args=process.argv.slice(1).filter(a=>a!=='--'); const [p]=args; const n=(p||'example').replace(/^\\.\\//,'').replace(/\\.ts$/i,''); import('node:path').then(path=>import(new URL(path.resolve('examples', n + '.ts'), 'file:')));\" --",
     "test": "pnpm -w --dir ../.. exec turbo run test:core test:e2e --filter=@browserbasehq/stagehand --",
     "test:core": "tsx scripts/test-core.ts",
+    "test:native": "vitest run --config tests/native/vitest.native.config.mjs",
     "test:e2e": "tsx scripts/test-e2e.ts",
     "format": "prettier --write .",
     "typecheck": "pnpm -w --dir ../.. exec tsc -p packages/core/tsconfig.json --noEmit",
