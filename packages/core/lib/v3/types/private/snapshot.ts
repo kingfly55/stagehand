@@ -110,6 +110,18 @@ export type A11yOptions = {
   encode: (backendNodeId: number) => string;
 };
 
+/**
+ * Options for the native (Playwright-public-API) snapshot path.
+ * Intentionally separate from A11yOptions — the CDP path requires an `encode`
+ * function (backendNodeId → encodedId) which has no equivalent here.
+ */
+export type NativeA11yOptions = {
+  focusSelector?: string;
+  experimental: boolean;
+  pierceShadow: boolean;
+  includeIframes: boolean;
+};
+
 export type AccessibilityTreeResult = {
   outline: string;
   urlMap: Record<string, string>;
