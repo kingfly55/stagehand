@@ -6,8 +6,9 @@
  *   RUN 1 (cold): LLM resolves every selector  → ~3–8s per step
  *   RUN 2 (warm): Selectors replayed from disk  → <50ms per step
  *
- * Run:
- *   pnpm example v3/demo_01_caching
+ * Run (from repo root):
+ *   set -a && source .env && set +a
+ *   cd packages/core && pnpm example v3/demo_01_caching
  *
  * Optional env:
  *   OPENROUTER_API_KEY  (preferred)

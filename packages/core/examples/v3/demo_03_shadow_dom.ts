@@ -7,8 +7,9 @@
  *   pierceShadow: true             → sees open shadows, MISSES closed shadows
  *   pierceShadow: "including-closed" → sees BOTH open and closed shadows
  *
- * Run:
- *   pnpm example v3/demo_03_shadow_dom
+ * Run (from repo root):
+ *   cd packages/core && pnpm example v3/demo_03_shadow_dom
+ *   (no API key needed — headless Chromium only)
  */
 
 import { chromium } from "playwright-core";
