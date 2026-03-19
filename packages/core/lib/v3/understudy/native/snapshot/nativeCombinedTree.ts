@@ -18,6 +18,11 @@ export type NativeNodeEntry = {
   isShadowHost: boolean; // element has a shadowRoot
   isIframeHost: boolean; // tag === 'iframe'
   href?: string;         // only when tag === 'a' or tag === 'area'
+  // Phase 6: ARIA state attributes
+  expanded?: string | null;   // aria-expanded: "true"/"false"/null
+  checked?: string | null;    // aria-checked: "true"/"false"/"mixed"/null
+  selected?: string | null;   // aria-selected: "true"/"false"/null
+  disabled?: boolean;         // true when aria-disabled="true" OR [disabled] attr present
 };
 
 /**
@@ -97,13 +102,27 @@ const INJECTED_SCRIPT_SRC = `
     return Array.from(text).slice(0, 200).join('');
   }
 
+  // Returns text content while skipping aria-hidden subtrees (per accname-1.1 spec).
+  function getVisibleText(node) {
+    var text = '';
+    for (var i = 0; i < node.childNodes.length; i++) {
+      var child = node.childNodes[i];
+      if (child.nodeType === 3) {
+        text += child.nodeValue;
+      } else if (child.nodeType === 1 && child.getAttribute('aria-hidden') !== 'true') {
+        text += getVisibleText(child);
+      }
+    }
+    return text;
+  }
+
   function getAccessibleName(el) {
     var labelledBy = el.getAttribute('aria-labelledby');
     if (labelledBy) {
       var text = labelledBy.split(' ')
         .map(function(id) {
           var node = document.getElementById(id);
-          return node ? (node.textContent || '').trim() : '';
+          return node ? getVisibleText(node).trim() : '';
         })
         .join(' ').trim();
       if (text) return truncate(text);
@@ -112,8 +131,13 @@ const INJECTED_SCRIPT_SRC = `
     if (ariaLabel) { ariaLabel = ariaLabel.trim(); if (ariaLabel) return truncate(ariaLabel); }
     var title = el.getAttribute('title');
     if (title) { title = title.trim(); if (title) return truncate(title); }
-    var tc = el.textContent;
-    if (tc) { tc = tc.trim(); if (tc) return truncate(tc); }
+    var id = el.getAttribute('id');
+    if (id) {
+      var lbl = document.querySelector('label[for="' + CSS.escape(id) + '"]');
+      if (lbl) { var lt = getVisibleText(lbl).trim(); if (lt) return truncate(lt); }
+    }
+    var tc = getVisibleText(el).trim();
+    if (tc) return truncate(tc);
     return '';
   }
 
@@ -129,6 +153,7 @@ const INJECTED_SCRIPT_SRC = `
 
   function walk(el, depth, parentOrdinal) {
     if (!el || el.nodeType !== 1) return;
+    if (el.getAttribute("aria-hidden") === "true") return;
     var myOrdinal = ordinal++;
     var tag = el.tagName.toLowerCase();
     var role = getRole(el);
@@ -147,7 +172,11 @@ const INJECTED_SCRIPT_SRC = `
       isScrollable: isScrollable(el),
       isShadowHost: !!el.shadowRoot,
       isIframeHost: tag === 'iframe',
-      href: href
+      href: href,
+      expanded: el.getAttribute("aria-expanded"),
+      checked: el.getAttribute("aria-checked"),
+      selected: el.getAttribute("aria-selected"),
+      disabled: el.getAttribute("aria-disabled") === "true" || el.hasAttribute("disabled"),
     });
 
     for (var i = 0; i < el.children.length; i++) {
