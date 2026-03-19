@@ -27,6 +27,7 @@ const publicApiShape = {
   CustomOpenAIClient: Stagehand.CustomOpenAIClient,
   LLMClient: Stagehand.LLMClient,
   LOG_LEVEL_NAMES: Stagehand.LOG_LEVEL_NAMES,
+  PlaywrightNativePage: Stagehand.PlaywrightNativePage,
   Response: Stagehand.Response,
   Stagehand: Stagehand.Stagehand,
   V3: Stagehand.V3,

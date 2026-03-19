@@ -1,4 +1,10 @@
 /**
+ * Opt-in value for {@link SnapshotOptions.pierceShadow} that enables closed shadow root
+ * capture via the attachShadow interceptor.
+ */
+export const PIERCE_SHADOW_INCLUDING_CLOSED = "including-closed" as const;
+
+/**
  * Options that control how hybrid snapshots and targeted scopes are captured.
  */
 export type SnapshotOptions = {
@@ -11,7 +17,7 @@ export type SnapshotOptions = {
    * Pierce shadow DOM when calling DOM.getDocument. Defaults to true to retain the
    * existing behaviour.
    */
-  pierceShadow?: boolean;
+  pierceShadow?: boolean | "including-closed";
   /**
    * Toggle whether iframe subtrees are included in the merged snapshot. Defaults to true.
    */
@@ -108,6 +114,18 @@ export type A11yOptions = {
   tagNameMap: Record<string, string>;
   scrollableMap: Record<string, boolean>;
   encode: (backendNodeId: number) => string;
+};
+
+/**
+ * Options for the native (Playwright-public-API) snapshot path.
+ * Intentionally separate from A11yOptions — the CDP path requires an `encode`
+ * function (backendNodeId → encodedId) which has no equivalent here.
+ */
+export type NativeA11yOptions = {
+  focusSelector?: string;
+  experimental: boolean;
+  pierceShadow: boolean | "including-closed";
+  includeIframes: boolean;
 };
 
 export type AccessibilityTreeResult = {

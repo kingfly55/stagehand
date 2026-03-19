@@ -7,6 +7,7 @@ import type {
   StagehandZodSchema,
 } from "../../zodCompat.js";
 import { Page } from "../../understudy/page.js";
+import { PlaywrightNativePage } from "../../understudy/native/PlaywrightNativePage.js";
 import { ModelConfiguration } from "../public/model.js";
 import type { Variables } from "./agent.js";
 
@@ -14,7 +15,7 @@ export interface ActOptions {
   model?: ModelConfiguration;
   variables?: Variables;
   timeout?: number;
-  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page;
+  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page | PlaywrightNativePage;
   /**
    * Override the instance-level serverCache setting for this request.
    * When true, enables server-side caching.
@@ -54,7 +55,7 @@ export interface ExtractOptions {
   model?: ModelConfiguration;
   timeout?: number;
   selector?: string;
-  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page;
+  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page | PlaywrightNativePage;
   /**
    * Override the instance-level serverCache setting for this request.
    * When true, enables server-side caching.
@@ -75,7 +76,7 @@ export interface ObserveOptions {
   model?: ModelConfiguration;
   timeout?: number;
   selector?: string;
-  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page;
+  page?: PlaywrightPage | PuppeteerPage | PatchrightPage | Page | PlaywrightNativePage;
   /**
    * Override the instance-level serverCache setting for this request.
    * When true, enables server-side caching.

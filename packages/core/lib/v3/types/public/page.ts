@@ -2,9 +2,11 @@ import { Page } from "../../understudy/page.js";
 import { Page as PlaywrightPage } from "playwright-core";
 import { Page as PatchrightPage } from "patchright-core";
 import { Page as PuppeteerPage } from "puppeteer-core";
+import { PlaywrightNativePage } from "../../understudy/native/PlaywrightNativePage.js";
 
 export type { PlaywrightPage, PatchrightPage, PuppeteerPage, Page };
-export type AnyPage = PlaywrightPage | PuppeteerPage | PatchrightPage | Page;
+export { PlaywrightNativePage };
+export type AnyPage = PlaywrightPage | PuppeteerPage | PatchrightPage | Page | PlaywrightNativePage;
 
 export { ConsoleMessage } from "../../understudy/consoleMessage.js";
 export type { ConsoleListener } from "../../understudy/consoleMessage.js";

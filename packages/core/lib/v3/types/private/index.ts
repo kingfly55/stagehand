@@ -5,3 +5,4 @@ export * from "./evaluator.js";
 export * from "./cache.js";
 export * from "./agent.js";
 export * from "./snapshot.js";
+export type { IStagehandPage, ResolvedAction } from "./IStagehandPage.js";

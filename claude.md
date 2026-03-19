@@ -1,5 +1,42 @@
 # Stagehand Project
 
+---
+
+## ⚑ Fork Context (read this first)
+
+**Branch:** `native-base` on `kingfly55/stagehand` (fork of `browserbase/stagehand`)
+**Active feature:** Playwright-native execution mode — allows Stagehand to run against Firefox/camoufox by replacing raw CDP calls with Playwright public APIs.
+**Current phase:** See open GitHub Issues labeled `native-mode` at https://github.com/kingfly55/stagehand/issues
+
+### Ground truth documents (read the relevant section, not the whole file)
+| Document | What it covers |
+|---|---|
+| `PLAYWRIGHT_NATIVE_PLAN.md` | Architecture, interface design, component map, all design decisions |
+| `TESTING_GUIDE.md` | Pre-dev setup checklist, per-phase test commands, acceptance criteria |
+
+### Hard constraints for every agent
+- **Never modify** any file inside `packages/core/lib/v3/understudy/` except `page.ts` (IStagehandPage impl only)
+- **Never modify** `packages/core/lib/v3/handlers/` except to change `Page` type references to `IStagehandPage`
+- **All new implementation code** goes in `packages/core/lib/v3/understudy/native/`
+- **Never commit to `main`** — work on `native-base` or a feature branch off it
+- **Run `pnpm typecheck` before declaring any task done** — it must exit 0
+
+### Verification commands (inner loop)
+```bash
+pnpm typecheck                                   # ~10s, no browser needed
+pnpm build:esm && pnpm test:core                 # ~30s, 534+ tests, no browser needed
+pnpm build:esm && pnpm test:native               # ~60s, requires Chromium
+pnpm example v3/camoufox_test                    # Phase 5 only, requires camoufox + OPENAI_API_KEY
+```
+
+### Receiving upstream updates
+```bash
+git checkout main && git pull upstream main
+git checkout native-base && git rebase main
+```
+
+---
+
 This is a project that uses Stagehand V3, a browser automation framework with AI-powered `act`, `extract`, `observe`, and `agent` methods.
 
 The main class can be imported as `Stagehand` from `@browserbasehq/stagehand`.

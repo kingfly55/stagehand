@@ -80,6 +80,9 @@ import {
 } from "./types/public/index.js";
 import { V3Context } from "./understudy/context.js";
 import { Page } from "./understudy/page.js";
+import { PlaywrightNativeContext } from "./understudy/native/PlaywrightNativeContext.js";
+import { PlaywrightNativePage } from "./understudy/native/PlaywrightNativePage.js";
+import type { IStagehandPage } from "./types/private/IStagehandPage.js";
 import { resolveModel } from "../modelUtils.js";
 import { StagehandAPIClient } from "./api.js";
 import { validateExperimentalFeatures } from "./agent/utils/validateExperimentalFeatures.js";
@@ -148,6 +151,7 @@ export class V3 {
   private extractHandler: ExtractHandler | null = null;
   private observeHandler: ObserveHandler | null = null;
   private ctx: V3Context | null = null;
+  private nativeCtx: PlaywrightNativeContext | null = null;
   public llmClient!: LLMClient;
 
   /**
@@ -733,6 +737,21 @@ export class V3 {
               inferenceTimeMs,
             ),
         );
+        if (this.opts.browserContext) {
+          // Validate: reject ambiguous BROWSERBASE + browserContext combination
+          if (this.opts.env === "BROWSERBASE") {
+            throw new StagehandInvalidArgumentError(
+              "Cannot use browserContext with env: 'BROWSERBASE'. " +
+                "Remove browserContext or switch to env: 'LOCAL'.",
+            );
+          }
+          this.nativeCtx = new PlaywrightNativeContext(this.opts.browserContext, {
+            logger: this.logger,
+          });
+          this.state = { kind: "PLAYWRIGHT_NATIVE" };
+          return;
+        }
+
         if (this.opts.env === "LOCAL") {
           // chrome-launcher conditionally adds --headless when the environment variable
           // HEADLESS is set, without parsing its value.
@@ -1101,10 +1120,16 @@ export class V3 {
         // Use selector as provided to support XPath, CSS, and other engines
         const selector = input.selector;
         if (this.apiClient) {
+          if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+            throw new StagehandInvalidArgumentError(
+              "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+                "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+            );
+          }
           actResult = await this.apiClient.act({
             input,
             options,
-            frameId: v3Page.mainFrameId(),
+            frameId: (v3Page as unknown as Page).mainFrameId(),
           });
         } else {
           const ensureTimeRemaining = createTimeoutGuard(
@@ -1188,7 +1213,13 @@ export class V3 {
         model: options?.model,
       };
       if (this.apiClient) {
-        const frameId = page.mainFrameId();
+        if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+          throw new StagehandInvalidArgumentError(
+            "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+              "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+          );
+        }
+        const frameId = (page as unknown as Page).mainFrameId();
         actResult = await this.apiClient.act({ input, options, frameId });
       } else {
         actResult = await this.actHandler.act(handlerParams);
@@ -1300,7 +1331,13 @@ export class V3 {
       };
       let result: z.infer<typeof effectiveSchema> | { pageText: string };
       if (this.apiClient) {
-        const frameId = page.mainFrameId();
+        if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+          throw new StagehandInvalidArgumentError(
+            "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+              "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+          );
+        }
+        const frameId = (page as unknown as Page).mainFrameId();
         result = await this.apiClient.extract({
           instruction: handlerParams.instruction,
           schema: handlerParams.schema,
@@ -1372,7 +1409,13 @@ export class V3 {
 
       let results: Action[];
       if (this.apiClient) {
-        const frameId = page.mainFrameId();
+        if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+          throw new StagehandInvalidArgumentError(
+            "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+              "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+          );
+        }
+        const frameId = (page as unknown as Page).mainFrameId();
         results = await this.apiClient.observe({
           instruction,
           options,
@@ -1400,6 +1443,11 @@ export class V3 {
     if (this.state.kind === "UNINITIALIZED") {
       throw new StagehandNotInitializedError("connectURL()");
     }
+    if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+      throw new StagehandInvalidArgumentError(
+        "connectURL() is not available in PLAYWRIGHT_NATIVE mode.",
+      );
+    }
     return this.state.ws;
   }
 
@@ -1413,6 +1461,24 @@ export class V3 {
     // If we're already closing and this isn't a forced close, no-op.
     if (this._isClosing && !opts?.force) return;
     this._isClosing = true;
+
+    // In native mode the BrowserContext is owned by the caller — do not close it.
+    // Only reset internal Stagehand state. This must come before apiClient.end().
+    if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+      this.state = { kind: "UNINITIALIZED" };
+      this.nativeCtx = null;
+      this._isClosing = false;
+      this.resetBrowserbaseSessionMetadata();
+      try { unbindInstanceLogger(this.instanceId); } catch { /* ignore */ }
+      try { await this.eventStore.destroy(); } catch { /* ignore */ }
+      try { this.bus.removeAllListeners(); } catch { /* ignore */ }
+      this._history = [];
+      this.actHandler = null;
+      this.extractHandler = null;
+      this.observeHandler = null;
+      V3._instances.delete(this);
+      return;
+    }
 
     const keepAlive = this.keepAlive === true;
 
@@ -1608,9 +1674,13 @@ export class V3 {
   }
 
   /** Resolve an external page reference or fall back to the active V3 page. */
-  private async resolvePage(page?: AnyPage): Promise<Page> {
+  private async resolvePage(page?: AnyPage): Promise<IStagehandPage> {
     if (page) {
       return await this.normalizeToV3Page(page);
+    }
+    // Native mode: this.ctx is null; use nativeCtx instead
+    if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+      return this.nativeCtx!.getActivePage();
     }
     const ctx = this.ctx;
     if (!ctx) {
@@ -1619,10 +1689,20 @@ export class V3 {
     return await ctx.awaitActivePage();
   }
 
-  private async normalizeToV3Page(input: AnyPage): Promise<Page> {
-    if (input instanceof (await import("./understudy/page.js")).Page) {
-      return input as Page;
+  private async normalizeToV3Page(input: AnyPage): Promise<IStagehandPage> {
+    // 1. Already a PlaywrightNativePage — return as-is (MUST be first; it duck-types as PlaywrightPage)
+    if (input instanceof PlaywrightNativePage) {
+      return input;
     }
+    // 2. Already a CDP Page — return as-is
+    if (input instanceof Page) {
+      return input;
+    }
+    // 3. In native mode: wrap any raw playwright.Page
+    if (this.state.kind === "PLAYWRIGHT_NATIVE" && this.isPlaywrightPage(input)) {
+      return this.nativeCtx!.wrapPage(input as PlaywrightPage);
+    }
+    // 4. CDP mode: existing Playwright/Patchright/Puppeteer paths (unchanged)
     if (this.isPlaywrightPage(input)) {
       const frameId = await this.resolveTopFrameId(input);
       const page = this.ctx!.resolvePageByMainFrameId(frameId);
@@ -1752,7 +1832,9 @@ export class V3 {
 
     if (resolvedOptions.page) {
       const normalizedPage = await this.normalizeToV3Page(resolvedOptions.page);
-      this.ctx!.setActivePage(normalizedPage);
+      if (this.state.kind !== "PLAYWRIGHT_NATIVE") {
+        this.ctx!.setActivePage(normalizedPage as unknown as Page);
+      }
     }
 
     const instruction = resolvedOptions.instruction.trim();
@@ -1761,12 +1843,16 @@ export class V3 {
 
     const cacheVariables = flattenVariables(resolvedOptions.variables);
 
+    const startPage: IStagehandPage = this.state.kind === "PLAYWRIGHT_NATIVE"
+      ? this.nativeCtx!.getActivePage()
+      : await this.ctx!.awaitActivePage();
+
     const cacheContext = this.agentCache.shouldAttemptCache(instruction)
       ? await this.agentCache.prepareContext({
           instruction,
           options: sanitizedOptions,
           configSignature: agentConfigSignature,
-          page: await this.ctx!.awaitActivePage(),
+          page: startPage,
           variables: cacheVariables,
         })
       : null;
@@ -1915,7 +2001,9 @@ export class V3 {
               const normalizedPage = await this.normalizeToV3Page(
                 resolvedOptions.page,
               );
-              this.ctx!.setActivePage(normalizedPage);
+              if (this.state.kind !== "PLAYWRIGHT_NATIVE") {
+                this.ctx!.setActivePage(normalizedPage as unknown as Page);
+              }
             }
             const instruction = resolvedOptions.instruction.trim();
             const sanitizedOptions =
@@ -1925,7 +2013,9 @@ export class V3 {
 
             let cacheContext: AgentCacheContext | null = null;
             if (this.agentCache.shouldAttemptCache(instruction)) {
-              const startPage = await this.ctx!.awaitActivePage();
+              const startPage: IStagehandPage = this.state.kind === "PLAYWRIGHT_NATIVE"
+                ? this.nativeCtx!.getActivePage()
+                : await this.ctx!.awaitActivePage();
               cacheContext = await this.agentCache.prepareContext({
                 instruction,
                 options: sanitizedOptions,
@@ -1951,6 +2041,12 @@ export class V3 {
             let result: AgentResult;
             try {
               if (this.apiClient && !this.experimental) {
+                if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+                  throw new StagehandInvalidArgumentError(
+                    "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+                      "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+                  );
+                }
                 const page = await this.ctx!.awaitActivePage();
                 result = await this.apiClient.agentExecute(
                   options,
@@ -2085,6 +2181,12 @@ export class V3 {
 
           try {
             if (this.apiClient && !this.experimental) {
+              if (this.state.kind === "PLAYWRIGHT_NATIVE") {
+                throw new StagehandInvalidArgumentError(
+                  "apiClient path is not supported in PLAYWRIGHT_NATIVE mode. " +
+                    "Remove the apiClient option or use env: 'LOCAL'/'BROWSERBASE'.",
+                );
+              }
               const page = await this.ctx!.awaitActivePage();
               result = await this.apiClient.agentExecute(
                 options ?? {},

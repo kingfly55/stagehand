@@ -2,7 +2,7 @@ import { createHash } from "crypto";
 import type { ActHandler } from "../handlers/actHandler.js";
 import type { LLMClient } from "../llm/LLMClient.js";
 import type { Action, ActResult, Logger } from "../types/public/index.js";
-import type { Page } from "../understudy/page.js";
+import type { IStagehandPage } from "../types/private/IStagehandPage.js";
 import { CacheStorage } from "./CacheStorage.js";
 import { safeGetPageUrl, waitForCachedSelector } from "./utils.js";
 import {
@@ -40,7 +40,7 @@ export class ActCache {
 
   async prepareContext(
     instruction: string,
-    page: Page,
+    page: IStagehandPage,
     variables?: Record<string, string>,
   ): Promise<ActCacheContext | null> {
     if (!this.enabled) return null;
@@ -66,7 +66,7 @@ export class ActCache {
 
   async tryReplay(
     context: ActCacheContext,
-    page: Page,
+    page: IStagehandPage,
     timeout?: number,
     llmClientOverride?: LLMClient,
   ): Promise<ActResult | null> {
@@ -197,7 +197,7 @@ export class ActCache {
   private async replayCachedActions(
     context: ActCacheContext,
     entry: CachedActEntry,
-    page: Page,
+    page: IStagehandPage,
     timeout?: number,
     llmClientOverride?: LLMClient,
   ): Promise<ActResult> {

@@ -6,6 +6,7 @@ import {
   type BrowserbaseSessionCreateParams,
   LocalBrowserLaunchOptionsSchema,
 } from "./api.js";
+import type { BrowserContext } from "playwright-core";
 
 export type V3Env = "LOCAL" | "BROWSERBASE";
 
@@ -19,6 +20,15 @@ export type LocalBrowserLaunchOptions = z.infer<
 /** Constructor options for V3 */
 export interface V3Options {
   env: V3Env;
+  /**
+   * Optional: provide an externally-managed Playwright BrowserContext.
+   * When set, Stagehand skips all Chrome/Browserbase launch code and wraps
+   * the provided context. The caller is responsible for closing the context.
+   * When browserContext is set, env is ignored for launch purposes.
+   * Note: env must still be set (use "LOCAL") to satisfy the type; the value
+   * is not used for browser launch when browserContext is provided.
+   */
+  browserContext?: BrowserContext;
   /**
    * Optional external session identifier to use for flow logging/event storage.
    * When omitted, Stagehand falls back to its internal instance id.

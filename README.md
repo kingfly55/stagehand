@@ -55,6 +55,56 @@ If you're looking for the Python implementation, you can find it
   </picture>
 </div>
 
+---
+
+## This Fork
+
+This is a fork of [browserbase/stagehand](https://github.com/browserbase/stagehand) with **Playwright-Native Mode** — a set of enhancements that let Stagehand operate on browsers you launch and manage yourself, including Firefox and anti-detection browsers like [camoufox](https://camoufox.com/).
+
+### What's different from upstream
+
+| Feature | Upstream | This fork |
+|---|---|---|
+| **Playwright-native mode** | No | Yes — pass `browserContext` to the constructor |
+| **Firefox / camoufox support** | No | Yes |
+| **CDP-free operation** | No | Yes (pure Playwright public API) |
+| **Closed shadow DOM** | No | Yes — `pierceShadow: "including-closed"` |
+| **Improved ARIA snapshot engine** | Partial | Full `aria-*` attribute coverage, accname-1.1 spec |
+| **act() local caching** | Yes | Yes + cache-hit detection via `logger` |
+
+### Key API additions
+
+```typescript
+// Bring your own browser context (camoufox, custom Firefox, etc.)
+const stagehand = new Stagehand({
+  env: "LOCAL",
+  browserContext: ctx,   // any Playwright BrowserContext
+  model: { ... },
+});
+await stagehand.init();
+
+// Always pass page explicitly in native mode
+await stagehand.act("click the login button", { page });
+await stagehand.extract("get the title", schema, { page });
+await stagehand.observe("find all buttons", { page });
+```
+
+### Demo scripts
+
+Three runnable demos are in `packages/core/examples/v3/`:
+
+```bash
+pnpm example v3/demo_01_caching       # act() cold vs warm cache comparison
+pnpm example v3/demo_02_camoufox_extract  # camoufox + observe/extract (needs CAMOUFOX_WS)
+pnpm example v3/demo_03_shadow_dom    # closed shadow DOM piercing (no API key needed)
+```
+
+### Divergence from upstream
+
+This fork tracks upstream `main` and periodically rebases. The implementation lives in `packages/core/lib/v3/` under `understudy/native/`. It is designed to be non-breaking — all existing Stagehand code continues to work unchanged.
+
+---
+
 ## What is Stagehand?
 
 Stagehand is a browser automation framework used to control web browsers with natural language and code. By combining the power of AI with the precision of code, Stagehand makes web automation flexible, maintainable, and actually reliable.
