@@ -170,7 +170,11 @@ const INJECTED_SCRIPT_SRC = `
       role: role,
       name: name,
       isScrollable: isScrollable(el),
-      isShadowHost: !!el.shadowRoot,
+      isShadowHost: !!el.shadowRoot || (
+        pierceShadow === "including-closed" &&
+        typeof window.__stagehandClosedRoot === "function" &&
+        !!window.__stagehandClosedRoot(el)
+      ),
       isIframeHost: tag === 'iframe',
       href: href,
       expanded: el.getAttribute("aria-expanded"),
@@ -196,6 +200,35 @@ const INJECTED_SCRIPT_SRC = `
           }
         } else {
           walk(child, depth + 1, myOrdinal);
+        }
+      }
+    }
+
+    // KNOWN LIMITATIONS for closed shadow roots:
+    // 1. Light-DOM children of this host were already walked via el.children above.
+    //    If the closed shadow slots those children, they will appear twice in the
+    //    snapshot (once from light DOM, once from slot resolution). Deferred fix.
+    // 2. buildXPath() walks parentElement, which is null inside a shadow root.
+    //    XPaths for elements inside a closed shadow root will truncate at the
+    //    host boundary, producing non-unique paths. Deferred fix.
+    if (pierceShadow === "including-closed" && !el.shadowRoot) {
+      var closedRoot = typeof window.__stagehandClosedRoot === "function"
+        ? window.__stagehandClosedRoot(el)
+        : null;
+      if (closedRoot) {
+        var csChildren = closedRoot.children;
+        for (var ci2 = 0; ci2 < csChildren.length; ci2++) {
+          var csChild = csChildren[ci2];
+          if (csChild.tagName && csChild.tagName.toLowerCase() === 'slot') {
+            var csAssigned = csChild.assignedElements({ flatten: true });
+            if (csAssigned.length > 0) {
+              for (var ca = 0; ca < csAssigned.length; ca++) walk(csAssigned[ca], depth + 1, myOrdinal);
+            } else {
+              for (var cd = 0; cd < csChild.children.length; cd++) walk(csChild.children[cd], depth + 1, myOrdinal);
+            }
+          } else {
+            walk(csChild, depth + 1, myOrdinal);
+          }
         }
       }
     }
@@ -256,7 +289,7 @@ export async function captureNativeCombinedTree(
         new Function(
           "arg",
           `return (${INJECTED_SCRIPT_SRC})(arg)`,
-        ) as (arg: { pierceShadow: boolean }) => NativeNodeEntry[],
+        ) as (arg: { pierceShadow: boolean | "including-closed" }) => NativeNodeEntry[],
         { pierceShadow: opts.pierceShadow },
       );
       results.push({ frameOrdinal: i, frameUrl: frame.url(), entries });

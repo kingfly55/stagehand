@@ -1,3 +1,4 @@
+import { vi } from "vitest";
 import type * as playwright from "playwright-core";
 import type { NativeNodeEntry } from "../../../lib/v3/understudy/native/snapshot/nativeCombinedTree.js";
 
@@ -50,7 +51,7 @@ export function createMockPlaywrightPage(
     waitForLoadState: async (): Promise<void> => {},
     waitForNetworkIdle: async (): Promise<void> => {},
     screenshot: async (): Promise<Buffer> => Buffer.from(""),
-    addInitScript: async (): Promise<void> => {},
+    addInitScript: vi.fn(async (): Promise<void> => {}),
   } as unknown as playwright.Page;
 
   return mockPage;

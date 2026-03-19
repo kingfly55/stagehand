@@ -63,7 +63,10 @@ export async function captureNativeSnapshot(
 ): Promise<HybridSnapshot> {
   // Phase 7: Use Playwright's built-in ARIA engine when available.
   // Note: method is _snapshotForAI (underscore) in playwright-core >= 1.52.
-  if (typeof (page as any)._snapshotForAI === "function") {
+  if (
+    typeof (page as any)._snapshotForAI === "function" &&
+    opts.pierceShadow !== "including-closed"
+  ) {
     return captureAriaSnapshot(page, opts);
   }
 

@@ -1,4 +1,10 @@
 /**
+ * Opt-in value for {@link SnapshotOptions.pierceShadow} that enables closed shadow root
+ * capture via the attachShadow interceptor.
+ */
+export const PIERCE_SHADOW_INCLUDING_CLOSED = "including-closed" as const;
+
+/**
  * Options that control how hybrid snapshots and targeted scopes are captured.
  */
 export type SnapshotOptions = {
@@ -11,7 +17,7 @@ export type SnapshotOptions = {
    * Pierce shadow DOM when calling DOM.getDocument. Defaults to true to retain the
    * existing behaviour.
    */
-  pierceShadow?: boolean;
+  pierceShadow?: boolean | "including-closed";
   /**
    * Toggle whether iframe subtrees are included in the merged snapshot. Defaults to true.
    */
@@ -118,7 +124,7 @@ export type A11yOptions = {
 export type NativeA11yOptions = {
   focusSelector?: string;
   experimental: boolean;
-  pierceShadow: boolean;
+  pierceShadow: boolean | "including-closed";
   includeIframes: boolean;
 };
 
