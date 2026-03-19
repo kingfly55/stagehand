@@ -10,8 +10,9 @@
  *   • extract() — pulling structured JSON from a live page
  *   • The ARIA snapshot that drives both (Phase 6/7 improvements)
  *
- * Run:
- *   pnpm example v3/demo_02_camoufox_extract
+ * Run (from repo root):
+ *   set -a && source .env && set +a
+ *   cd packages/core && pnpm example v3/demo_02_camoufox_extract
  *
  * Required env:
  *   CAMOUFOX_WS         — WebSocket URL printed by camoufox on startup

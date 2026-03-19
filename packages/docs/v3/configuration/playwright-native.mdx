@@ -209,9 +209,14 @@ A fully-annotated demo is available at [`packages/core/examples/v3/demo_02_camou
 Run it with:
 
 ```bash
-# Set env vars in .env
-CAMOUFOX_WS=ws://localhost:PORT/TOKEN
-OPENAI_API_KEY=...   # or OPENROUTER_API_KEY
-
+# From repo root — source your .env, then run from packages/core
+set -a && source .env && set +a
+cd packages/core
 pnpm example v3/demo_02_camoufox_extract
+```
+
+Required `.env` variables:
+```bash
+CAMOUFOX_WS=ws://localhost:PORT/TOKEN   # printed by camoufox on startup
+OPENAI_API_KEY=...                       # or OPENROUTER_API_KEY
 ```
