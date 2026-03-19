@@ -10,6 +10,7 @@ import {
   captureNativeCombinedTree,
   type NativeNodeEntry,
 } from "./nativeCombinedTree.js";
+import { captureAriaSnapshot } from "./ariaSnapshotCapture.js";
 
 /**
  * Build a tree of A11yNode objects from a flat NativeNodeEntry[] array using
@@ -60,6 +61,13 @@ export async function captureNativeSnapshot(
   page: playwright.Page,
   opts: NativeA11yOptions,
 ): Promise<HybridSnapshot> {
+  // Phase 7: Use Playwright's built-in ARIA engine when available.
+  // Note: method is _snapshotForAI (underscore) in playwright-core >= 1.52.
+  if (typeof (page as any)._snapshotForAI === "function") {
+    return captureAriaSnapshot(page, opts);
+  }
+
+  // Fallback: Phase 6 DOM walker path follows unchanged.
   const { frames } = await captureNativeCombinedTree(page, opts);
 
   const combinedXpathMap: Record<string, string> = {};
