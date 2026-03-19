@@ -46,7 +46,8 @@ export async function captureHybridSnapshot(
   page: Page,
   options?: SnapshotOptions,
 ): Promise<HybridSnapshot> {
-  const pierce = options?.pierceShadow ?? true;
+  // "including-closed" is a native-only feature; CDP path treats it as true.
+  const pierce = options?.pierceShadow !== false;
   const includeIframes = options?.includeIframes !== false;
 
   const context = buildFrameContext(page);

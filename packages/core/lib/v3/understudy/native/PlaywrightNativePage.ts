@@ -6,6 +6,10 @@
 // - FlowLogger decorators are absent — PagePerformAction/PageClose events will
 //   not appear in flow logs for native mode.
 // - evaluate() rejects string expressions (CDP-ism); callers must pass functions.
+// - addInitScript() for pierceShadow: "including-closed" installs the closed-shadow
+//   interceptor context-wide (all pages in the BrowserContext), not only on the page
+//   that requested it. This is a Playwright limitation. Pages that did not opt in
+//   will carry the __stagehandClosedRoot global as a fingerprinting side effect.
 
 import type { Page as PlaywrightPage } from "playwright-core";
 import type { IStagehandPage, ResolvedAction } from "../../types/private/IStagehandPage.js";
@@ -15,11 +19,33 @@ import type { LoadState } from "../../types/public/page.js";
 import type { InitScriptSource } from "../../types/private/internal.js";
 import type { LogLine } from "../../types/public/logs.js";
 import { StagehandInvalidArgumentError } from "../../types/public/sdkErrors.js";
+import { v3Logger } from "../../logger.js";
 import { performNativeAction } from "./actions/nativeActionDispatch.js";
 import { captureNativeSnapshot } from "./snapshot/captureNativeSnapshot.js";
 
+const CLOSED_SHADOW_INTERCEPTOR = `
+(function() {
+  if (typeof window.__stagehandClosedRoot === "function" || window.__stagehandClosedRootInstalled) return;
+  try {
+    var _closed = new WeakMap();
+    var _orig = Element.prototype.attachShadow;
+    Element.prototype.attachShadow = function(init) {
+      var root = _orig.call(this, init);
+      if (init && init.mode === "closed") _closed.set(this, root);
+      return root;
+    };
+    window.__stagehandClosedRoot = function(host) { return _closed.get(host) ?? null; };
+    window.__stagehandClosedRootInstalled = true;
+  } catch (e) {
+    // attachShadow patch failed (frozen prototype or CSP); degrading gracefully.
+    // Closed shadow roots created before a successful install will not be captured.
+  }
+})();
+`;
+
 export class PlaywrightNativePage implements IStagehandPage {
   private _disposed = false;
+  private _closedShadowInstalled = false;
 
   constructor(
     public readonly _pwPage: PlaywrightPage,
@@ -102,6 +128,23 @@ export class PlaywrightNativePage implements IStagehandPage {
   // ── Snapshot ────────────────────────────────────────────────────────────────
 
   async captureSnapshot(opts?: SnapshotOptions): Promise<HybridSnapshot> {
+    if (opts?.pierceShadow === "including-closed" && !this._closedShadowInstalled) {
+      await this._pwPage.addInitScript(CLOSED_SHADOW_INTERCEPTOR);
+      this._closedShadowInstalled = true;
+      // IMPORTANT: addInitScript takes effect on the next navigation only.
+      // Closed shadow roots that were attached before this call are invisible
+      // to the interceptor. Navigate or reload the page after enabling this
+      // option to capture pre-existing roots. Do NOT auto-reload here —
+      // callers control navigation timing.
+      v3Logger({
+        message:
+          "pierceShadow=\"including-closed\": CLOSED_SHADOW_INTERCEPTOR installed. " +
+          "Closed roots attached before this call are not captured. " +
+          "Reload or navigate the page to capture them.",
+        level: 1,
+      });
+    }
+
     return captureNativeSnapshot(this._pwPage, {
       focusSelector: opts?.focusSelector,
       experimental: opts?.experimental ?? false,
