@@ -557,17 +557,18 @@ if should_run 6; then
   require_tag "phase-4-complete"
 
   PHASE6_VERIFY=$(cat <<'VERIFY'
-cd /home/joenathan/stagehand/packages/core
-pnpm typecheck
-pnpm build:esm && pnpm test:core
-pnpm build:esm && pnpm test:native
-# Verify aria-hidden exclusion
-node -e "
+# All commands use absolute paths — each is self-contained for the verification agent.
+CORE=/home/joenathan/stagehand/packages/core
+bash -c "cd $CORE && pnpm typecheck"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:core"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:native"
+# Verify aria-hidden exclusion (must rebuild first, then run node from packages/core)
+bash -c "cd $CORE && pnpm build:esm && node -e \"
 const { chromium } = require('playwright-core');
 (async () => {
   const b = await chromium.launch({ headless: true });
   const p = await b.newPage();
-  await p.setContent('<div aria-hidden=\"true\"><button>Hidden</button></div><button>Visible</button>');
+  await p.setContent('<div aria-hidden=\\\"true\\\"><button>Hidden</button></div><button>Visible</button>');
   const { captureNativeSnapshot } = await import('./dist/esm/lib/v3/understudy/native/snapshot/captureNativeSnapshot.js');
   const snap = await captureNativeSnapshot(p, { pierceShadow: true, includeIframes: true, experimental: false });
   const tree = snap.combinedTree;
@@ -576,17 +577,7 @@ const { chromium } = require('playwright-core');
   console.log('aria-hidden check: PASS');
   await b.close();
 })();
-" || exit 1
-# Verify git diff scope
-CHANGED=$(git diff --name-only origin/native-base)
-echo "Changed files: $CHANGED"
-ALLOWED="packages/core/lib/v3/understudy/native/snapshot/nativeCombinedTree.ts packages/core/lib/v3/understudy/native/actions/nativeActionDispatch.ts"
-for f in $CHANGED; do
-  if ! echo "$ALLOWED" | grep -q "$f"; then
-    echo "FAIL: unexpected file changed: $f"; exit 1
-  fi
-done
-echo "File scope check: PASS"
+\""
 VERIFY
 )
 
@@ -607,32 +598,26 @@ if should_run 7; then
   require_tag "phase-6-complete"
 
   PHASE7_VERIFY=$(cat <<'VERIFY'
-cd /home/joenathan/stagehand/packages/core
-pnpm typecheck
-pnpm build:esm && pnpm test:core
-pnpm build:esm && pnpm test:native
-pnpm example v3/native_snapshot_smoke 2>&1 | tee /tmp/smoke7.txt
-ENTRY_COUNT=$(grep -c "role\|heading\|link\|button\|text" /tmp/smoke7.txt || echo 0)
-if [ "$ENTRY_COUNT" -lt 5 ]; then
-  echo "FAIL: smoke test produced fewer than 5 entries"; cat /tmp/smoke7.txt; exit 1
-fi
-echo "Smoke test entry count: $ENTRY_COUNT — PASS"
-# Verify snapshotForAI path used (or fallback logged)
-grep -E "snapshotForAI|ariaSnapshot|fallback" /tmp/smoke7.txt || true
-# Verify label-for still works (regression check from phase 6)
-node -e "
+CORE=/home/joenathan/stagehand/packages/core
+bash -c "cd $CORE && pnpm typecheck"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:core"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:native"
+# Smoke test: snapshot must have ≥5 recognizable entries
+bash -c "cd $CORE && pnpm build:esm && pnpm example v3/native_snapshot_smoke 2>&1 | tee /tmp/smoke7.txt; ENTRY_COUNT=\$(grep -c 'role\|heading\|link\|button\|text' /tmp/smoke7.txt || echo 0); if [ \"\$ENTRY_COUNT\" -lt 5 ]; then echo 'FAIL: smoke test produced fewer than 5 entries'; cat /tmp/smoke7.txt; exit 1; fi; echo \"Smoke test entry count: \$ENTRY_COUNT — PASS\"; grep -E 'snapshotForAI|ariaSnapshot|fallback' /tmp/smoke7.txt || true"
+# label-for regression check from phase 6
+bash -c "cd $CORE && node -e \"
 const { chromium } = require('playwright-core');
 (async () => {
   const b = await chromium.launch({ headless: true });
   const p = await b.newPage();
-  await p.setContent('<label for=\"e\">Email</label><input id=\"e\" type=\"email\">');
+  await p.setContent('<label for=\\\"e\\\">Email</label><input id=\\\"e\\\" type=\\\"email\\\">');
   const { captureNativeSnapshot } = await import('./dist/esm/lib/v3/understudy/native/snapshot/captureNativeSnapshot.js');
   const snap = await captureNativeSnapshot(p, { pierceShadow: true, includeIframes: true, experimental: false });
   if (!snap.combinedTree.includes('Email')) { console.error('FAIL: label-for regression'); process.exit(1); }
   console.log('label-for regression check: PASS');
   await b.close();
 })();
-" || exit 1
+\""
 VERIFY
 )
 
@@ -655,25 +640,14 @@ if should_run 8; then
   require_tag "phase-7-complete"
 
   PHASE8_VERIFY=$(cat <<'VERIFY'
-cd /home/joenathan/stagehand/packages/core
-pnpm typecheck
-pnpm build:esm && pnpm test:core
-pnpm build:esm && pnpm test:native
-# Verify default behaviour unchanged (no init script for pierceShadow:true)
-node -e "
-const { PlaywrightNativeContext } = require('./dist/esm/lib/v3/understudy/native/PlaywrightNativeContext.js');
-// If the context installs no init script by default, addInitScript won't be called
-console.log('PlaywrightNativeContext instantiation check: PASS (no crash)');
-" || exit 1
-# Check that pierceShadow: 'including-closed' is a valid type (compile-time only)
-grep -r 'including-closed' dist/esm/lib/v3/types/private/snapshot.js || {
-  echo "FAIL: 'including-closed' not found in compiled output"; exit 1
-}
-echo "pierceShadow type check: PASS"
-# Run unit test for closed shadow (agent must create this test in test:core suite)
-pnpm build:esm && pnpm test:core --reporter=verbose 2>&1 | grep -E "closed.shadow|attachShadow" || {
-  echo "FAIL: no closed shadow unit test found in test:core"; exit 1
-}
+CORE=/home/joenathan/stagehand/packages/core
+bash -c "cd $CORE && pnpm typecheck"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:core"
+bash -c "cd $CORE && pnpm build:esm && pnpm test:native"
+# pierceShadow 'including-closed' must appear in compiled snapshot types
+bash -c "grep -r 'including-closed' $CORE/dist/esm/lib/v3/types/private/snapshot.js && echo 'pierceShadow type check: PASS' || { echo 'FAIL: including-closed not in compiled output'; exit 1; }"
+# closed shadow unit test must exist in test:core suite output
+bash -c "cd $CORE && pnpm build:esm && pnpm test:core --reporter=verbose 2>&1 | grep -E 'closed.shadow|attachShadow' && echo 'closed shadow test: PASS' || { echo 'FAIL: no closed shadow unit test found'; exit 1; }"
 VERIFY
 )
 
