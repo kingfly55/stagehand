@@ -165,6 +165,7 @@ describe("Stagehand public API types", () => {
   describe("ObserveOptions", () => {
     type ExpectedObserveOptions = {
       model?: Stagehand.ModelConfiguration;
+      variables?: Stagehand.Variables;
       timeout?: number;
       selector?: string;
       page?: Stagehand.AnyPage;

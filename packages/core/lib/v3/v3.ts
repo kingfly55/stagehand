@@ -1,3 +1,4 @@
+import type { LanguageModelV2Middleware } from "@ai-sdk/provider";
 import fs from "fs";
 import os from "os";
 import path from "path";
@@ -20,6 +21,7 @@ import { ExtractHandler } from "./handlers/extractHandler.js";
 import { ObserveHandler } from "./handlers/observeHandler.js";
 import { V3AgentHandler } from "./handlers/v3AgentHandler.js";
 import { V3CuaAgentHandler } from "./handlers/v3CuaAgentHandler.js";
+import { CAPTCHA_CUA_SYSTEM_PROMPT_NOTE } from "./agent/utils/captchaSolver.js";
 import { createBrowserbaseSession } from "./launch/browserbase.js";
 import { launchLocalChrome } from "./launch/local.js";
 import { LLMClient } from "./llm/LLMClient.js";
@@ -100,9 +102,10 @@ const DEFAULT_AGENT_TOOL_TIMEOUT_MS = 45000;
 type ResolvedModelConfiguration = {
   modelName: AvailableModel;
   clientOptions?: ClientOptions;
+  middleware?: LanguageModelV2Middleware;
 };
 
-function resolveModelConfiguration(
+export function resolveModelConfiguration(
   model?: V3Options["model"],
 ): ResolvedModelConfiguration {
   if (!model) {
@@ -114,7 +117,7 @@ function resolveModelConfiguration(
   }
 
   if (model && typeof model === "object") {
-    const { modelName, ...clientOptions } = model;
+    const { modelName, middleware, ...clientOptions } = model;
     if (!modelName) {
       throw new StagehandInvalidArgumentError(
         "model.modelName is required when providing client options.",
@@ -123,6 +126,7 @@ function resolveModelConfiguration(
     return {
       modelName,
       clientOptions: clientOptions as ClientOptions,
+      middleware,
     };
   }
 
@@ -183,6 +187,18 @@ export class V3 {
    */
   public get isBrowserbase(): boolean {
     return this.state.kind === "BROWSERBASE";
+  }
+
+  /**
+   * Returns true if captcha auto-solving is enabled on Browserbase.
+   * Defaults to true when not explicitly set to false.
+   */
+  public get isCaptchaAutoSolveEnabled(): boolean {
+    return (
+      this.isBrowserbase &&
+      this.opts.browserbaseSessionCreateParams?.browserSettings
+        ?.solveCaptchas !== false
+    );
   }
 
   /**
@@ -314,11 +330,13 @@ export class V3 {
     } catch {
       // ignore
     }
-    const { modelName, clientOptions } = resolveModelConfiguration(opts.model);
+    const { modelName, clientOptions, middleware } = resolveModelConfiguration(
+      opts.model,
+    );
     this.modelName = modelName;
     this.experimental = opts.experimental ?? false;
     this.logInferenceToFile = opts.logInferenceToFile ?? false;
-    this.llmProvider = new LLMProvider(this.logger);
+    this.llmProvider = new LLMProvider(this.logger, middleware);
     this.domSettleTimeoutMs = opts.domSettleTimeout;
     this.disableAPI = opts.disableAPI ?? false;
 
@@ -386,7 +404,7 @@ export class V3 {
 
     // FlowLogger always gets a per-instance session context and shared event
     // bus. The attached EventStore decides which sinks are active:
-    // `verbose: 2` or `BROWSERBASE_FLOW_LOGS=1` enables pretty stderr output,
+    // `BROWSERBASE_FLOW_LOGS=1` enables pretty stderr output,
     // and `BROWSERBASE_CONFIG_DIR` enables the pretty/jsonl file sinks for this session.
     this.eventStore = new EventStore(this.sessionId, opts);
     this.flowLoggerContext = FlowLogger.init(this.sessionId, this.bus);
@@ -431,17 +449,20 @@ export class V3 {
 
     let modelName: AvailableModel | string;
     let clientOptions: ClientOptions | undefined;
+    let perCallMiddleware: LanguageModelV2Middleware | undefined;
 
     if (typeof model === "string") {
       modelName = model;
     } else {
-      const { modelName: overrideModelName, ...rest } = model;
+      const { modelName: overrideModelName, middleware, ...rest } = model;
       modelName = overrideModelName;
       clientOptions = rest as ClientOptions;
+      perCallMiddleware = middleware;
     }
 
     if (
       modelName === this.modelName &&
+      !perCallMiddleware &&
       (!clientOptions || Object.keys(clientOptions).length === 0)
     ) {
       return this.llmClient;
@@ -463,6 +484,18 @@ export class V3 {
       }
     }
 
+    if (perCallMiddleware) {
+      return this.llmProvider.getClient(
+        modelName as AvailableModel,
+        mergedOptions,
+        {
+          experimental: this.experimental,
+          disableAPI: this.disableAPI,
+          middleware: perCallMiddleware,
+        },
+      );
+    }
+
     const cacheKey = JSON.stringify({
       modelName,
       clientOptions: mergedOptions,
@@ -476,7 +509,10 @@ export class V3 {
     const client = this.llmProvider.getClient(
       modelName as AvailableModel,
       mergedOptions,
-      { experimental: this.experimental, disableAPI: this.disableAPI },
+      {
+        experimental: this.experimental,
+        disableAPI: this.disableAPI,
+      },
     );
 
     this.overrideLlmClients.set(cacheKey, client);
@@ -1402,6 +1438,7 @@ export class V3 {
       const handlerParams: ObserveHandlerParams = {
         instruction,
         model: options?.model,
+        variables: options?.variables,
         timeout: options?.timeout,
         selector: options?.selector,
         page: page!,
@@ -1430,6 +1467,7 @@ export class V3 {
         "observe",
         {
           instruction,
+          variables: options?.variables,
           timeout: options?.timeout,
         },
         results,
@@ -1807,6 +1845,7 @@ export class V3 {
       options?.systemPrompt,
       tools,
       options?.mode,
+      this.isCaptchaAutoSolveEnabled,
     );
 
     const resolvedOptions: AgentExecuteOptions | AgentStreamExecuteOptions =
@@ -1979,8 +2018,11 @@ export class V3 {
                 modelName,
                 clientOptions,
                 userProvidedInstructions:
-                  options.systemPrompt ??
-                  `You are a helpful assistant that can use a web browser.\nDo not ask follow up questions, the user will trust your judgement.`,
+                  (options.systemPrompt ??
+                    `You are a helpful assistant that can use a web browser.\nDo not ask follow up questions, the user will trust your judgement.`) +
+                  (this.isCaptchaAutoSolveEnabled
+                    ? CAPTCHA_CUA_SYSTEM_PROMPT_NOTE
+                    : ""),
               },
               tools,
             );

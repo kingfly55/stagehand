@@ -1,6 +1,9 @@
 import type { ClientOptions as AnthropicClientOptionsBase } from "@anthropic-ai/sdk";
 import type { GoogleVertexProviderSettings as GoogleVertexProviderSettingsBase } from "@ai-sdk/google-vertex";
-import type { LanguageModelV2 } from "@ai-sdk/provider";
+import type {
+  LanguageModelV2,
+  LanguageModelV2Middleware,
+} from "@ai-sdk/provider";
 import type { ClientOptions as OpenAIClientOptionsBase } from "openai";
 import type { AgentProviderType } from "./agent.js";
 
@@ -116,8 +119,19 @@ export type ClientOptions = (
   temperature?: number;
   /** Custom headers sent with every request to the provider */
   headers?: Record<string, string>;
+  /** Reasoning effort for reasoning-capable models (e.g., "none", "low", "medium", "high") */
+  reasoningEffort?: string;
 };
 
 export type ModelConfiguration =
   | AvailableModel
-  | (ClientOptions & { modelName: AvailableModel });
+  | (ClientOptions & {
+      modelName: AvailableModel;
+      /**
+       * Optional AI SDK middleware applied to every LanguageModelV2 created for this model.
+       * Use this to intercept LLM calls for usage tracking, logging, request transforms, etc.
+       *
+       * Only effective when running locally (direct mode). Cannot be serialized over HTTP,
+       */
+      middleware?: LanguageModelV2Middleware;
+    });
