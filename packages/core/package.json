@@ -1,6 +1,6 @@
 {
   "name": "@browserbasehq/stagehand",
-  "version": "3.2.0",
+  "version": "3.2.1",
   "description": "An AI web browsing framework focused on simplicity and extensibility.",
   "type": "module",
   "main": "./dist/cjs/index.js",
@@ -32,11 +32,7 @@
   },
   "scripts": {
     "gen-version": "tsx scripts/gen-version.ts",
-    "build-dom-scripts": "pnpm run --parallel \"/^build-dom-scripts:(dom|locator|screenshot|a11y)$/\"",
-    "build-dom-scripts:dom": "tsx lib/v3/dom/genDomScripts.ts",
-    "build-dom-scripts:locator": "tsx lib/v3/dom/genLocatorScripts.ts",
-    "build-dom-scripts:screenshot": "tsx lib/v3/dom/genScreenshotScripts.ts",
-    "build-dom-scripts:a11y": "tsx lib/v3/dom/genA11yScripts.ts",
+    "build-dom-scripts": "tsx scripts/build-dom-scripts.ts",
     "build:cjs": "tsx scripts/build-cjs.ts",
     "build:esm": "tsx scripts/build-esm.ts",
     "build": "pnpm --filter @browserbasehq/stagehand run --parallel \"/^build:(esm|cjs)$/\"",
@@ -70,7 +66,7 @@
   "dependencies": {
     "@ai-sdk/provider": "^2.0.0",
     "@anthropic-ai/sdk": "0.39.0",
-    "@browserbasehq/sdk": "^2.7.0",
+    "@browserbasehq/sdk": "^2.10.0",
     "@google/genai": "^1.22.0",
     "@langchain/openai": "^0.4.4",
     "@modelcontextprotocol/sdk": "^1.17.2",
