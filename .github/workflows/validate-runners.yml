@@ -1,0 +1,75 @@
+name: Validate Runners
+
+on:
+  pull_request:
+    paths:
+      - '.github/workflows/**'
+  push:
+    paths:
+      - '.github/workflows/**'
+  workflow_call:
+
+jobs:
+  validate:
+    runs-on: centergram-arc-runners
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Validate all workflow files use self-hosted runners
+        run: |
+          python3 <<'PYEOF'
+          import glob, sys, yaml
+
+          ALLOWED = {"centergram-arc-runners", "self-hosted"}
+          FORBIDDEN_PREFIXES = ("ubuntu-", "windows-", "macos-")
+          FORBIDDEN_EXACT = {"ubuntu-latest", "windows-latest", "macos-latest"}
+
+          failures = []
+          files = sorted(glob.glob(".github/workflows/*.yml") + glob.glob(".github/workflows/*.yaml"))
+          if not files:
+              print("No workflow files found — nothing to validate.")
+              sys.exit(0)
+
+          for path in files:
+              try:
+                  with open(path) as f:
+                      data = yaml.safe_load(f)
+              except yaml.YAMLError as e:
+                  failures.append(f"{path}: invalid YAML ({e})")
+                  continue
+              if not isinstance(data, dict) or "jobs" not in data:
+                  continue
+
+              for job_name, job in data["jobs"].items():
+                  if not isinstance(job, dict):
+                      continue
+                  runs_on = job.get("runs-on")
+                  if runs_on is None:
+                      if "uses" in job:
+                          continue  # reusable workflow caller — runner is defined in callee
+                      failures.append(f"{path} :: job '{job_name}': missing 'runs-on'")
+                      continue
+                  labels = [runs_on] if isinstance(runs_on, str) else list(runs_on)
+                  for label in labels:
+                      if not isinstance(label, str):
+                          failures.append(f"{path} :: job '{job_name}': non-string runs-on label {label!r}")
+                          continue
+                      if "${{" in label:
+                          failures.append(f"{path} :: job '{job_name}': dynamic runs-on expression '{label}' is not allowed — use a static self-hosted label")
+                          continue
+                      if label in FORBIDDEN_EXACT or label.startswith(FORBIDDEN_PREFIXES):
+                          failures.append(f"{path} :: job '{job_name}': uses GitHub-hosted runner '{label}' — switch to 'centergram-arc-runners'")
+                          continue
+                      if label not in ALLOWED and not label.startswith("self-hosted"):
+                          failures.append(f"{path} :: job '{job_name}': unrecognized runs-on label '{label}' — allowed: {sorted(ALLOWED)}")
+
+          if failures:
+              print("::error::Workflow validation failed. All jobs must run on self-hosted CenterGram runners.")
+              for msg in failures:
+                  print(f"::error::  {msg}")
+              print()
+              print("::error::To fix: change 'runs-on:' to 'centergram-arc-runners' in the offending job(s).")
+              sys.exit(1)
+
+          print(f"OK — {len(files)} workflow file(s) validated, all use approved self-hosted runners.")
+          PYEOF
