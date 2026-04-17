@@ -7,7 +7,6 @@ on:
   push:
     paths:
       - '.github/workflows/**'
-  workflow_call:
 
 jobs:
   validate:
