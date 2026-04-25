@@ -450,6 +450,7 @@ export type AgentType =
   | "bedrock";
 
 export const AVAILABLE_CUA_MODELS = [
+  "openai/gpt-5.4",
   "openai/computer-use-preview",
   "openai/computer-use-preview-2025-03-11",
   "anthropic/claude-opus-4-5-20251101",
@@ -578,10 +579,14 @@ export interface ResponseItem {
 export interface ComputerCallItem extends ResponseItem {
   type: "computer_call";
   call_id: string;
-  action: {
+  action?: {
     type: string;
     [key: string]: unknown;
   };
+  actions?: Array<{
+    type: string;
+    [key: string]: unknown;
+  }>;
   pending_safety_checks?: Array<{
     id: string;
     code: string;
@@ -603,8 +608,9 @@ export type ResponseInputItem =
       call_id: string;
       output:
         | {
-            type: "input_image";
+            type: "input_image" | "computer_screenshot";
             image_url: string;
+            detail?: "original" | "high" | "low";
             current_url?: string;
             error?: string;
             [key: string]: unknown;

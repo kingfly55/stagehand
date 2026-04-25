@@ -41,10 +41,6 @@ describe("AISdkClient structured output provider options", () => {
     ["azure/gpt-4.1", { azure: { strictJsonSchema: true } }],
     ["google/gemini-2.5-pro", { google: { structuredOutputs: true } }],
     ["vertex/gemini-2.5-pro", { vertex: { structuredOutputs: true } }],
-    [
-      "anthropic/claude-sonnet-4-20250514",
-      { anthropic: { structuredOutputMode: "auto" } },
-    ],
     ["groq/llama-3.3-70b-versatile", { groq: { structuredOutputs: true } }],
     ["cerebras/llama-4-scout", { cerebras: { strictJsonSchema: true } }],
     [
@@ -77,4 +73,29 @@ describe("AISdkClient structured output provider options", () => {
       );
     },
   );
+
+  it("omits temperature for claude-opus-4-7 structured calls", async () => {
+    const client = new AISdkClient({
+      model: createModel("anthropic/claude-opus-4-7"),
+      logger: vi.fn(),
+    });
+
+    await client.createChatCompletion({
+      options: {
+        messages: [{ role: "user", content: "hello" }],
+        response_model: {
+          name: "test",
+          schema: z.object({ ok: z.boolean() }),
+        },
+        temperature: 0.1,
+      },
+      logger: vi.fn(),
+    });
+
+    expect(mockGenerateObject).toHaveBeenCalledWith(
+      expect.objectContaining({
+        temperature: undefined,
+      }),
+    );
+  });
 });
